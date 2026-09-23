@@ -21,7 +21,7 @@ from django.utils import timezone
 from merchant_app.models import MerchantItem
 
 from ballsdex.core.game_events import normalize_command
-from bd_models.models import Ball, BallGroup, Player, Special, balls, groups, specials
+from bd_models.models import Ball, BallGroup, Economy, Player, Regime, Special, balls, groups, specials
 from settings.models import settings
 
 if TYPE_CHECKING:
@@ -81,6 +81,24 @@ class RewardKind(models.TextChoices):
     TREASURE = "treasure", "Treasure"
 
 
+class RewardMode(models.TextChoices):
+    ALL = "all", "Give everything below"
+    CHOICE = "choice", "The player picks from the lines below"
+    RANDOM = "random", "Draw at random from the lines below"
+
+
+class AccessKind(models.TextChoices):
+    """
+    One condition a player must meet to take part in a pass.
+    """
+
+    ROLE = "role", "Have a Discord role"
+    MAX_TREASURES = "max_treasures", "Own at most this many treasures"
+    MIN_TREASURES = "min_treasures", "Own at least this many treasures"
+    MAX_CURRENCY = "max_currency", "Have at most this many berries"
+    MIN_CURRENCY = "min_currency", "Have at least this many berries"
+
+
 class BonusMode(models.TextChoices):
     RANDOM = "random", "Random, like a catch"
     FIXED = "fixed", "The values set below"
@@ -129,8 +147,31 @@ class Reward(models.Model):
     message = models.TextField(
         blank=True, default="", help_text="Shown to the player when they claim it. Leave empty for the default text."
     )
-    emoji = models.CharField(max_length=64, blank=True, default="")
+    emoji = models.CharField(
+        max_length=64, blank=True, default="", help_text="Only used to recognise the bundle in the admin lists."
+    )
+    mode = models.CharField(
+        max_length=8,
+        choices=RewardMode.choices,
+        default=RewardMode.ALL,
+        help_text="Whether every line is given, the player picks among them, or they are drawn at random.",
+    )
+    pick = models.PositiveSmallIntegerField(
+        default=1, help_text="How many are picked or drawn, for the two modes above. Ignored when everything is given."
+    )
+    offer = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="How many options a choice shows when the lines resolve to more than that (a group, a rarity "
+        "range...). 0 offers them all, up to the 25 Discord allows.",
+    )
     lines: models.QuerySet[RewardLine]
+
+    def clean(self):
+        super().clean()
+        if self.pick < 1:
+            raise ValidationError({"pick": "At least one line must be picked."})
+        if self.offer and self.offer < self.pick:
+            raise ValidationError({"offer": "A choice must offer at least as many options as it picks."})
 
     def __str__(self) -> str:
         return f"{self.emoji} {self.name}".strip()
@@ -144,26 +185,77 @@ class Reward(models.Model):
 class RewardLine(models.Model):
     reward = models.ForeignKey(Reward, on_delete=models.CASCADE, related_name="lines")
     reward_id: int
-    kind = models.CharField(max_length=16, choices=RewardKind.choices, default=RewardKind.TREASURE)
-    position = models.PositiveSmallIntegerField(default=0)
+    kind = models.CharField(
+        max_length=16,
+        choices=RewardKind.choices,
+        default=RewardKind.TREASURE,
+        help_text="Berries are always given whatever the bundle's mode; only treasures are picked or drawn.",
+    )
+    position = models.PositiveSmallIntegerField(
+        default=0, help_text="Lines are given, offered and listed from the lowest position."
+    )
 
     # berries
     amount = models.PositiveBigIntegerField(default=0, help_text="Berries given, for a berry line.")
 
-    # treasures
-    ball = models.ForeignKey(Ball, null=True, blank=True, on_delete=models.CASCADE)
+    # treasures: either one named treasure, or a pool the treasure is taken from
+    ball = models.ForeignKey(
+        Ball,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        help_text="The treasure given. Leave empty to draw one from the pool below instead.",
+    )
     ball_id: int | None
     quantity = models.PositiveSmallIntegerField(default=1, help_text="How many copies of the treasure are given.")
-    special = models.ForeignKey(Special, null=True, blank=True, on_delete=models.SET_NULL)
+
+    # -- pool, used when no treasure is named: every enabled treasure matching all of these
+    group = models.ForeignKey(
+        BallGroup, null=True, blank=True, on_delete=models.CASCADE, related_name="+", help_text="Pool: this group."
+    )
+    group_id: int | None
+    regime = models.ForeignKey(
+        Regime, null=True, blank=True, on_delete=models.CASCADE, related_name="+", help_text="Pool: this regime."
+    )
+    regime_id: int | None
+    economy = models.ForeignKey(
+        Economy, null=True, blank=True, on_delete=models.CASCADE, related_name="+", help_text="Pool: this economy."
+    )
+    economy_id: int | None
+    min_rarity = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Pool: lowest rarity value kept. A lower value is rarer, so this drops the "
+        "rarest treasures — 10 leaves out everything rarer than T10.",
+    )
+    max_rarity = models.FloatField(
+        null=True, blank=True, help_text="Pool: highest rarity value kept, which drops the most common treasures."
+    )
+    exclude_balls: models.ManyToManyField[Ball, models.Model] = models.ManyToManyField(
+        Ball, blank=True, related_name="+", help_text="Pool: treasures never drawn, whatever the filters above say."
+    )
+    special = models.ForeignKey(
+        Special,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text="Special put on the treasure given. Leave empty for a regular one.",
+    )
     special_id: int | None
     frame_key = models.CharField(
         max_length=32,
         blank=True,
         default="",
-        help_text='Frame given to the treasure, as its key in the Frames section ("09-20-2026", or '
-        '"09-20-2026:3" for a frame of one special). Leave empty for a normal card.',
+        help_text='Frame given to the treasure: its name ("Haki Aura") or the key it is stored under '
+        '("09-20-2026", or "09-20-2026:3" for a frame of one special). A name is easier to read and does not '
+        "change when the event moves. Leave empty for a normal card.",
     )
-    bonus_mode = models.CharField(max_length=8, choices=BonusMode.choices, default=BonusMode.RANDOM)
+    bonus_mode = models.CharField(
+        max_length=8,
+        choices=BonusMode.choices,
+        default=BonusMode.RANDOM,
+        help_text="How the attack and health bonuses of the treasure are rolled.",
+    )
     attack_bonus = models.IntegerField(default=0, help_text="Used when the bonuses are fixed.")
     health_bonus = models.IntegerField(default=0, help_text="Used when the bonuses are fixed.")
     tradeable = models.BooleanField(
@@ -179,19 +271,59 @@ class RewardLine(models.Model):
     def cached_special(self) -> Special | None:
         return specials.get(self.special_id) or self.special if self.special_id else None
 
+    POOL_FIELDS = ("group_id", "regime_id", "economy_id", "min_rarity", "max_rarity")
+
+    @property
+    def is_pool(self) -> bool:
+        """
+        Whether this line draws from a pool instead of naming one treasure.
+        """
+        return self.kind == RewardKind.TREASURE and not self.ball_id
+
     def clean(self):
         super().clean()
         if self.kind == RewardKind.BERRIES and not self.amount:
             raise ValidationError({"amount": "A berry reward needs an amount."})
         if self.kind == RewardKind.TREASURE and not self.ball_id:
-            raise ValidationError({"ball": "A treasure reward needs a treasure."})
+            if not any(getattr(self, name) is not None for name in self.POOL_FIELDS):
+                raise ValidationError(
+                    {
+                        "ball": "A treasure reward needs a treasure, or a pool to draw one from (a group, a regime, "
+                        "an economy or a rarity range)."
+                    }
+                )
+        if self.min_rarity is not None and self.max_rarity is not None and self.min_rarity > self.max_rarity:
+            raise ValidationError({"max_rarity": "The maximum rarity must be above the minimum."})
+
+    def pool_description(self) -> str:
+        """
+        The pool as players read it: "a Straw Hats treasure", "a treasure between T18 and T33".
+        """
+        parts = []
+        if self.group_id:
+            group = groups.get(self.group_id) or self.group
+            parts.append(group.name if group else "a group")
+        if self.regime_id and self.regime:
+            parts.append(self.regime.name)
+        if self.economy_id and self.economy:
+            parts.append(self.economy.name)
+        if self.min_rarity is not None and self.max_rarity is not None:
+            parts.append(f"T{self.min_rarity:g}-T{self.max_rarity:g}")
+        elif self.min_rarity is not None:
+            parts.append(f"T{self.min_rarity:g} or more common")
+        elif self.max_rarity is not None:
+            parts.append(f"T{self.max_rarity:g} or rarer")
+        return " ".join(parts) or "any treasure"
 
     def __str__(self) -> str:
         if self.kind == RewardKind.BERRIES:
             return f"{self.amount:,} {settings.currency_plural}"
-        ball = self.cached_ball
         special = self.cached_special
-        text = f"{self.quantity}x {special.name + ' ' if special else ''}{ball.country if ball else '?'}"
+        prefix = f"{self.quantity}x {special.name + ' ' if special else ''}"
+        if self.is_pool:
+            return f"{prefix}{self.pool_description()}"
+        ball = self.cached_ball
+        text = f"{prefix}{ball.country if ball else '?'}"
         return f"{text} (framed)" if self.frame_key else text
 
     class Meta:
@@ -206,14 +338,27 @@ class EventPass(models.Model):
         ACTIVE = "active", "Active"
         ARCHIVED = "archived", "Archived (over, nothing can be claimed)"
 
-    name = models.CharField(max_length=64, unique=True)
-    emoji = models.CharField(max_length=64, blank=True, default="")
+    name = models.CharField(
+        max_length=64, unique=True, help_text="Shown as the title of the pass, and how it is named in /pass view."
+    )
+    emoji = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Shown before the name. A server emoji is written in full, like <:StrawHat:1477078273078067252>.",
+    )
     description = models.TextField(blank=True, default="", help_text="Shown at the top of the pass.")
     banner = models.ImageField(max_length=200, null=True, blank=True, help_text="Optional banner image.")
     colour = models.CharField(
         max_length=7, blank=True, default="", help_text="Accent colour of the pass, like #E63946. Optional."
     )
-    status = models.CharField(max_length=8, choices=Status.choices, default=Status.DRAFT)
+    status = models.CharField(
+        max_length=8,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        help_text="A draft is only visible to staff and nothing progresses in it. Publish it to let players "
+        "play, and archive it to close it for good.",
+    )
 
     starts_at = models.DateTimeField(help_text="Nothing progresses before this date.")
     ends_at = models.DateTimeField(help_text="Quests stop progressing after this date.")
@@ -241,6 +386,16 @@ class EventPass(models.Model):
     final_message = models.TextField(blank=True, default="", help_text="Shown when the pass is completed.")
     position = models.PositiveSmallIntegerField(default=0, help_text="Passes are listed from the lowest position.")
 
+    access_logic = models.CharField(
+        max_length=3,
+        choices=Logic.choices,
+        default=Logic.ALL,
+        help_text="Whether a player must meet every condition below, or only one of them.",
+    )
+    access_message = models.TextField(
+        blank=True, default="", help_text="Shown to a player who can't take part. Leave empty for the generated text."
+    )
+
     notes = models.TextField(blank=True, default="", help_text="Internal notes, never shown to players.")
     created_by = models.ForeignKey(
         django_settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
@@ -250,6 +405,7 @@ class EventPass(models.Model):
 
     tiers: models.QuerySet[PassTier]
     quests: models.QuerySet[Quest]
+    access: models.QuerySet[PassRequirement]
 
     def clean(self):
         super().clean()
@@ -304,12 +460,76 @@ class EventPass(models.Model):
         verbose_name_plural = "event passes"
 
 
+class PassRequirement(models.Model):
+    """
+    One condition a player must meet to take part in a pass, so an event can be reserved to a role or to newcomers.
+
+    A pass with no requirement is open to everyone, which is what every pass written before this was.
+    """
+
+    event_pass = models.ForeignKey(EventPass, on_delete=models.CASCADE, related_name="access")
+    event_pass_id: int
+    kind = models.CharField(
+        max_length=16, choices=AccessKind.choices, help_text="What the player must have to take part."
+    )
+    role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord ID of the role, for a role condition.")
+    role_name = models.CharField(
+        max_length=64, blank=True, default="", help_text="Only used to name the role in the message players read."
+    )
+    count = models.PositiveBigIntegerField(default=0, help_text="The number of treasures or berries, for the others.")
+
+    @property
+    def counts_live(self) -> bool:
+        """
+        Whether this condition can be rechecked without a Discord member, which is what repeating quests need.
+        """
+        return self.kind != AccessKind.ROLE
+
+    def describe(self) -> str:
+        """
+        The condition as players read it.
+        """
+        match self.kind:
+            case AccessKind.ROLE:
+                return f"Have the {self.role_name or 'required'} role"
+            case AccessKind.MAX_TREASURES:
+                return f"Own {self.count:,} {settings.plural_collectible_name} or fewer"
+            case AccessKind.MIN_TREASURES:
+                return f"Own at least {self.count:,} {settings.plural_collectible_name}"
+            case AccessKind.MAX_CURRENCY:
+                return f"Have {self.count:,} {settings.currency_plural} or fewer"
+            case AccessKind.MIN_CURRENCY:
+                return f"Have at least {self.count:,} {settings.currency_plural}"
+        return ""
+
+    def clean(self):
+        super().clean()
+        if self.kind == AccessKind.ROLE and not self.role_id:
+            raise ValidationError({"role_id": "Give the Discord ID of the role."})
+        if self.kind != AccessKind.ROLE and not self.count:
+            raise ValidationError({"count": "This condition needs a number."})
+
+    def __str__(self) -> str:
+        return self.describe()
+
+    class Meta:
+        managed = True
+        db_table = "eventpassaccess"
+        ordering = ("pk",)
+        verbose_name = "access condition"
+        verbose_name_plural = "access conditions"
+
+
 class PassTier(models.Model):
     event_pass = models.ForeignKey(EventPass, on_delete=models.CASCADE, related_name="tiers")
     event_pass_id: int
-    name = models.CharField(max_length=64)
-    emoji = models.CharField(max_length=64, blank=True, default="")
-    description = models.TextField(blank=True, default="")
+    name = models.CharField(max_length=64, help_text="Shown as the title of the tier's page, and in its unlock text.")
+    emoji = models.CharField(
+        max_length=64, blank=True, default="", help_text="Shown before the name, written in full for a server emoji."
+    )
+    description = models.TextField(
+        blank=True, default="", help_text="Shown under the title, on the first page of the tier."
+    )
     position = models.PositiveSmallIntegerField(default=0, help_text="Tiers are listed from the lowest position.")
 
     unlock_logic = models.CharField(
@@ -352,7 +572,11 @@ class TierRequirement(models.Model):
 
     tier = models.ForeignKey(PassTier, on_delete=models.CASCADE, related_name="requirements")
     tier_id: int
-    kind = models.CharField(max_length=16, choices=RequirementKind.choices)
+    kind = models.CharField(
+        max_length=16,
+        choices=RequirementKind.choices,
+        help_text="What opens the tier. Only the fields that kind uses are read.",
+    )
 
     quests: models.ManyToManyField[Quest, models.Model] = models.ManyToManyField(
         "Quest", blank=True, related_name="unlocks", help_text="The quests to complete, for that kind of requirement."
@@ -364,7 +588,13 @@ class TierRequirement(models.Model):
         Ball, null=True, blank=True, on_delete=models.CASCADE, help_text="The treasure players must own."
     )
     ball_id: int | None
-    special = models.ForeignKey(Special, null=True, blank=True, on_delete=models.SET_NULL)
+    special = models.ForeignKey(
+        Special,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text="The special the owned treasures must have, for that kind of requirement.",
+    )
     special_id: int | None
     date = models.DateTimeField(null=True, blank=True, help_text="The tier opens at this date.")
 
@@ -408,11 +638,13 @@ class Quest(models.Model):
     )
     tier_id: int | None
 
-    name = models.CharField(max_length=64)
+    name = models.CharField(max_length=64, help_text="Shown to players, and used to point at the quest in a file.")
     description = models.TextField(
         blank=True, default="", help_text="Shown to players. Leave empty to use the goal generated from the settings."
     )
-    emoji = models.CharField(max_length=64, blank=True, default="")
+    emoji = models.CharField(
+        max_length=64, blank=True, default="", help_text="Shown before the name, written in full for a server emoji."
+    )
     thumbnail = models.ImageField(max_length=200, null=True, blank=True, help_text="128x128 PNG image")
     position = models.PositiveSmallIntegerField(default=0, help_text="Quests are listed from the lowest position.")
     enabled = models.BooleanField(default=True, help_text="Uncheck to hide the quest without deleting it.")
@@ -423,7 +655,11 @@ class Quest(models.Model):
         "quest. A tier with no mandatory quest needs all its visible quests instead.",
     )
 
-    type = models.CharField(max_length=24, choices=QuestType.choices)
+    type = models.CharField(
+        max_length=24,
+        choices=QuestType.choices,
+        help_text="What the player has to do. It decides which of the filters below are used.",
+    )
     target = models.PositiveBigIntegerField(verbose_name="goal", default=1, help_text="How much progress is needed.")
     measure = models.CharField(
         max_length=8,
@@ -440,7 +676,14 @@ class Quest(models.Model):
     starts_at = models.DateTimeField(null=True, blank=True, help_text="Optional, defaults to the start of the pass.")
     ends_at = models.DateTimeField(null=True, blank=True, help_text="Optional, defaults to the end of the pass.")
 
-    reward = models.ForeignKey(Reward, null=True, blank=True, on_delete=models.SET_NULL, related_name="quests")
+    reward = models.ForeignKey(
+        Reward,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="quests",
+        help_text="Given when the quest is completed. A quest with no reward just counts towards the tier.",
+    )
     reward_id: int | None
     announce = models.CharField(
         max_length=9,
@@ -455,14 +698,35 @@ class Quest(models.Model):
     )
 
     # -- filters, which ones are used depends on the type
-    ball = models.ForeignKey(Ball, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    ball = models.ForeignKey(
+        Ball,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Only count this treasure. Leave empty for any.",
+    )
     ball_id: int | None
-    special = models.ForeignKey(Special, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    special = models.ForeignKey(
+        Special,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Only count treasures of this special. Leave empty for any.",
+    )
     special_id: int | None
     any_special = models.BooleanField(
         default=False, help_text="Only count treasures with a special, whichever it is. Ignored if a special is set."
     )
-    group = models.ForeignKey(BallGroup, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    group = models.ForeignKey(
+        BallGroup,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Only count treasures of this group. Leave empty for any.",
+    )
     group_id: int | None
     min_rarity = models.FloatField(
         null=True,
@@ -630,6 +894,18 @@ class PlayerPass(models.Model):
     event_pass_id: int
     joined_at = models.DateTimeField(auto_now_add=True)
     final_claimed_at = models.DateTimeField(null=True, blank=True)
+    eligible = models.BooleanField(
+        default=True,
+        help_text="Whether the player still meets the conditions of the pass. Rechecked every time they open it; "
+        "when it goes false, the quests that come back stop progressing, but what they already finished is theirs.",
+    )
+    eligible_checked_at = models.DateTimeField(null=True, blank=True)
+    passed = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="The access conditions the player met at that check, as their ids. The ones that need Discord (a "
+        "role) can only be read there, so the engine reuses this answer for them and counts the rest itself.",
+    )
 
     class Meta:
         managed = True
@@ -650,9 +926,9 @@ class PlayerQuest(models.Model):
     period = models.CharField(
         max_length=16, blank=True, default="", help_text='Empty for a one-off quest, "2026-09-20" for a daily one.'
     )
-    progress = models.PositiveBigIntegerField(default=0)
-    completed_at = models.DateTimeField(null=True, blank=True)
-    claimed_at = models.DateTimeField(null=True, blank=True)
+    progress = models.PositiveBigIntegerField(default=0, help_text="How far the player is, against the goal.")
+    completed_at = models.DateTimeField(null=True, blank=True, help_text="When the goal was reached.")
+    claimed_at = models.DateTimeField(null=True, blank=True, help_text="When the reward was handed over.")
 
     @property
     def completed(self) -> bool:
@@ -687,7 +963,7 @@ class RewardGrant(models.Model):
     event_pass_id: int
     reward = models.ForeignKey(Reward, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     reward_id: int | None
-    source = models.CharField(max_length=8, choices=Source.choices)
+    source = models.CharField(max_length=8, choices=Source.choices, help_text="What the reward was given for.")
     source_id = models.PositiveBigIntegerField(help_text="The quest or tier the reward came from.")
     period = models.CharField(max_length=16, blank=True, default="")
     summary = models.TextField(blank=True, default="", help_text="What was given, as it was shown to the player.")
@@ -698,3 +974,51 @@ class RewardGrant(models.Model):
         db_table = "eventpassrewardgrant"
         unique_together = (("player", "source", "source_id", "period"),)
         indexes = [models.Index(fields=("event_pass", "granted_at"), name="eventpass_grant_idx")]
+
+
+class RewardChoice(models.Model):
+    """
+    A reward the player still has to pick, kept between two uses of the pass.
+
+    A choice is written at the same moment as its `RewardGrant`, inside the same transaction, so a reward is reserved
+    exactly once even if the player never comes back to pick it. Nothing is handed out until `resolved_at` is set.
+    """
+
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="+")
+    player_id: int
+    event_pass = models.ForeignKey(EventPass, on_delete=models.CASCADE, related_name="choices")
+    event_pass_id: int
+    grant = models.OneToOneField("RewardGrant", on_delete=models.CASCADE, related_name="choice")
+    grant_id: int
+    reward = models.ForeignKey(Reward, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    reward_id: int | None
+    label = models.CharField(max_length=128, blank=True, default="", help_text="The quest or tier it came from.")
+    options = models.JSONField(default=list, help_text="The treasures offered, as their ids.")
+    picks = models.PositiveSmallIntegerField(default=1, help_text="How many of them the player takes.")
+    chosen = models.JSONField(default=list, blank=True, help_text="What they took, as treasure ids.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def pending(self) -> bool:
+        return self.resolved_at is None
+
+    def option_balls(self) -> list[Ball]:
+        """
+        The offered treasures, in the order they were offered. The caches must be loaded.
+        """
+        found = []
+        for ball_id in self.options:
+            ball = balls.get(ball_id)
+            if ball is not None:
+                found.append(ball)
+        return found
+
+    def __str__(self) -> str:
+        return f"{self.label or self.event_pass_id} for {self.player_id}"
+
+    class Meta:
+        managed = True
+        db_table = "eventpassrewardchoice"
+        ordering = ("pk",)
+        indexes = [models.Index(fields=("player", "resolved_at"), name="eventpass_choice_pending_idx")]
