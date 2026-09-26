@@ -43,6 +43,28 @@ __all__ = ("ACTIVITY_EVENTS", "Event", "EventContext", "bus", "normalize_command
 log = logging.getLogger("ballsdex.core.game_events")
 
 
+# key under which a command leaves its outcome on the interaction, read when the event is built
+COMMAND_WORKED = "ballsdex_command_worked"
+
+
+def command_did_nothing(interaction) -> None:
+    """
+    Mark a command as having had no effect: a daily still on cooldown, a shop with nothing left, a purchase
+    the player could not afford.
+
+    Quests can then ask to count only the commands that did something, instead of rewarding the player for
+    running a command that told them to come back tomorrow.
+    """
+    interaction.extras[COMMAND_WORKED] = False
+
+
+def command_worked(interaction) -> None:
+    """
+    Mark a command as having done what it promised. Only needed where the same command can also do nothing.
+    """
+    interaction.extras[COMMAND_WORKED] = True
+
+
 def normalize_command(name: str) -> str:
     """
     "/Treasures  List" and "treasures list" are the same command.
@@ -68,9 +90,11 @@ class Event(StrEnum):
     CURRENCY_SENT = "currency_sent"  # a player gave berries to someone
     CATCH_REWARD = "catch_reward"  # a player earned berries by catching a spawn
     ECONOMY = "economy"  # any berry movement, carrying its ledger reason: the catch-all of berry based goals
+    CURRENCY_STREAK = "currency_streak"  # a player claimed their daily berries, carrying the streak they are on
 
     # -- shops and crafting
     PACK_BUY = "pack_buy"  # a player bought a pack
+    PACK_STREAK = "pack_streak"  # a player claimed their daily pack, carrying the streak they are on
     MERCHANT_BUY = "merchant_buy"  # a player bought an item from the merchant
     SHOP_BUY = "shop_buy"  # a player bought a treasure from Buggy's shop
     SELL = "sell"  # a player sold a treasure to Buggy
@@ -108,6 +132,11 @@ class EventContext:
     given_currency: int = 0
     # commands only, like "treasures list"
     command_name: str = ""
+    # whether the command actually did something: False for a /daily on cooldown, a sold out shop, a buy the
+    # player could not afford. None when the command never said, which is most of them.
+    command_worked: bool | None = None
+    # streaks: how many days in a row the player has claimed, as it stands after this claim
+    streak: int = 0
     # berries moved by the action and, for ECONOMY, the BerryTransaction reason behind it. Signed like the ledger:
     # negative when the player paid, positive when they were credited.
     amount: int = 0
@@ -238,7 +267,9 @@ class GameEventBus:
         player = await Player.objects.aget_or_none(discord_id=interaction.user.id)
         if player is None:
             return
-        context = EventContext(command_name=name, server_id=interaction.guild_id)
+        context = EventContext(
+            command_name=name, server_id=interaction.guild_id, command_worked=interaction.extras.get(COMMAND_WORKED)
+        )
         event = Event.COMMAND if listened else Event.ACTIVITY
         await self.dispatch(player, event, context=context, channel_id=interaction.channel_id)
 

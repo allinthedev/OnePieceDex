@@ -16,14 +16,17 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
 from django.utils import timezone
 
 from ballsdex.core.game_events import Event, EventContext, normalize_command
+from bd_models.models import BallInstance, Friendship
+from settings.models import settings
 
-from .access import progress_gate
-from .models import EventPass, Measure, PlayerPass, PlayerQuest, Quest, QuestType, Reset, Reward, Source
-from .rewards import grant
-from .state import REWARD_LINES, finished_tier_ids, period_of, unlocked_tier_ids
+from .access import has_early_access, progress_gate
+from .models import EventPass, Measure, PassTier, PlayerPass, PlayerQuest, Quest, QuestType, Reset, Reward, Source
+from .rewards import grant, reward_preview
+from .state import REWARD_LINES, _finished, _pass_progress, finished_tier_ids, period_of, unlocked_tier_ids
 from .types import TYPES
 
 if TYPE_CHECKING:
@@ -58,6 +61,17 @@ class Completion:
     period: str
     auto_claimed: bool = False
     summary: str = ""
+
+
+@dataclass
+class TierDone:
+    """
+    A tier a player just finished. Worth its own message: the tier is the milestone, not whichever quest happened
+    to close it.
+    """
+
+    tier: PassTier
+    reward: str = ""
 
 
 class EventPassEngine:
@@ -97,8 +111,31 @@ class EventPassEngine:
         except Exception:
             log.exception("Failed to progress the quests of player %s for %s", player_id, event)
             return
-        if completions and self.notifier:
-            await self.notifier.add(player_id, completions, channel_id)
+        if not completions:
+            return
+        tiers = await self._tiers_just_finished(player_id, completions)
+        if self.notifier:
+            await self.notifier.add(player_id, completions, channel_id, tiers)
+
+    @staticmethod
+    async def _tiers_just_finished(player_id: int, completions: list[Completion]) -> list[TierDone]:
+        """
+        The tiers these completions closed: finished now, and not finished without them.
+
+        Asking both questions is what tells a milestone from a tier that was already done, and it stays right when
+        several quests land at once. Nothing extra is written down for it.
+        """
+        done: list[TierDone] = []
+        just_completed = {completion.quest.pk for completion in completions}
+        for event_pass in {completion.quest.event_pass for completion in completions}:
+            completed_ids, required = await _pass_progress(player_id, event_pass)
+            newly = _finished(required, completed_ids) - _finished(required, completed_ids - just_completed)
+            if not newly:
+                continue
+            tiers = PassTier.objects.filter(pk__in=newly).select_related("event_pass").prefetch_related(REWARD_LINES)
+            async for tier in tiers:
+                done.append(TierDone(tier=tier, reward=reward_preview(tier.reward) if tier.reward_id else ""))
+        return done
 
     async def listens_to_command(self, name: str) -> bool:
         return any(
@@ -129,7 +166,12 @@ class EventPassEngine:
     @staticmethod
     def _in_window(quest: Quest, now: datetime) -> bool:
         starts_at, ends_at = quest.window()
-        return quest.event_pass.running(now) and starts_at <= now <= ends_at
+        early = quest.event_pass.early_starts_at
+        if quest.starts_at is None and early is not None:
+            # a quest that follows the pass's dates opens with its early start too; who may actually play
+            # before the public start is decided per player, once the quest is a candidate
+            starts_at = min(starts_at, early)
+        return quest.event_pass.window_open(now) and starts_at <= now <= ends_at
 
     async def _process(
         self,
@@ -150,6 +192,9 @@ class EventPassEngine:
             # a pass reserved to a role or to newcomers only moves for the players taking part in it
             once_allowed, repeat_allowed = await progress_gate(player_id, event_pass)
             if not once_allowed and not repeat_allowed:
+                continue
+            # before the pass opens for everybody, only the players let in early play
+            if event_pass.open_early(now) and not await has_early_access(player_id, event_pass):
                 continue
             if any(quest.tier_id for quest in quests):
                 unlocked = await unlocked_tier_ids(player_id, event_pass, now)
@@ -180,13 +225,61 @@ class EventPassEngine:
                 continue
             if not self._matches(quest, context, event):
                 continue
-            result = self._evaluate(quest, context, event)
+            if quest.with_friend and not await self._with_a_friend(player_id, context):
+                continue
+            if quest.type == QuestType.OWN_TREASURES:
+                # this one asks what the player has, not what they just did, so it is counted rather than evaluated
+                result = Absolute(await self._owned_count(player_id, quest))
+            else:
+                result = self._evaluate(quest, context, event)
             if result is None:
                 continue
             completion = await self._apply(quest, player_id, row, period, result, now, context, channel_id)
             if completion is not None:
                 completions.append(completion)
         return completions
+
+    @staticmethod
+    async def _with_a_friend(player_id: int, context: EventContext) -> bool:
+        """
+        Whether the other player in this action is on the player's friend list.
+
+        An action with nobody on the other side never counts for such a quest: there is no friend to have done it
+        with.
+        """
+        partner = context.partner_discord_id
+        if not partner:
+            return False
+        return await Friendship.objects.filter(
+            Q(player1_id=player_id, player2__discord_id=partner) | Q(player2_id=player_id, player1__discord_id=partner)
+        ).aexists()
+
+    @staticmethod
+    async def _owned_count(player_id: int, quest: Quest) -> int:
+        """
+        How many treasures the player owns that match the quest's filters.
+
+        Counted from the database rather than followed through events: a collection changes through catches,
+        trades, gifts and sales, and a total is far easier to trust than a tally kept in step with all of them.
+        """
+        queryset = BallInstance.objects.filter(player_id=player_id, deleted=False)
+        if quest.ball_id:
+            queryset = queryset.filter(ball_id=quest.ball_id)
+        if quest.special_id:
+            queryset = queryset.filter(special_id=quest.special_id)
+        elif quest.any_special:
+            queryset = queryset.filter(special_id__isnull=False)
+        if quest.group_id:
+            queryset = queryset.filter(ball__groups=quest.group_id)
+        if quest.min_rarity is not None:
+            queryset = queryset.filter(ball__rarity__gte=quest.min_rarity)
+        if quest.max_rarity is not None:
+            queryset = queryset.filter(ball__rarity__lte=quest.max_rarity)
+        if quest.min_attack_bonus is not None:
+            queryset = queryset.filter(attack_bonus__gte=quest.min_attack_bonus)
+        if quest.min_health_bonus is not None:
+            queryset = queryset.filter(health_bonus__gte=quest.min_health_bonus)
+        return await queryset.acount()
 
     def _matches(self, quest: Quest, context: EventContext, event: Event) -> bool:
         """
@@ -231,6 +324,10 @@ class EventPassEngine:
 
             case QuestType.COMMAND:
                 if normalize_command(context.command_name) != normalize_command(quest.command_name):
+                    return None
+                # only a command that said it did nothing is turned away; one that never reports still counts,
+                # so this flag can be set without making a quest impossible to finish
+                if quest.require_command_effect and context.command_worked is False:
                     return None
                 return Increment(1)
 
@@ -288,6 +385,12 @@ class EventPassEngine:
                 if quest.merchant_item_id and context.merchant_item_id != quest.merchant_item_id:
                     return None
                 return self._purchase(quest, context)
+
+            case QuestType.CURRENCY_STREAK | QuestType.PACK_STREAK:
+                # a streak is where the player stands, not something that adds up: five days in a row is 5,
+                # not five separate claims. The goal is to reach it, so a streak that breaks afterwards does
+                # not undo the quest — an absolute result keeps the best the player ever reached
+                return Absolute(context.streak) if context.streak else None
 
             case QuestType.AUCTION_BID:
                 if quest.measure == Measure.AMOUNT:
@@ -347,7 +450,9 @@ class EventPassEngine:
         log.debug("Player %s completed quest %s (%s)", player_id, quest.pk, period or "once")
 
         completion = Completion(quest=quest, period=period)
-        if not quest.claim_required and quest.reward_id:
+        # the quest may hand its reward over on its own, or the bot may be set to never ask for a click
+        gives_now = not quest.claim_required or settings.pass_auto_claim
+        if gives_now and quest.reward_id:
             given = await grant(
                 player_id,
                 quest.event_pass,

@@ -223,7 +223,7 @@ class TierRequirementInline(admin.StackedInline):
 class PassRequirementInline(admin.TabularInline):
     model = PassRequirement
     extra = 0
-    fields = ("kind", "role_id", "role_name", "count")
+    fields = ("kind", "role_id", "role_name", "count", "grants_early_access")
     verbose_name = "access condition"
     verbose_name_plural = "access conditions"
 
@@ -232,7 +232,7 @@ class PassTierInline(admin.TabularInline):
     model = PassTier
     extra = 0
     show_change_link = True
-    fields = ("position", "name", "emoji", "unlock_logic", "reward", "quest_count")
+    fields = ("position", "name", "emoji", "unlock_logic", "announce", "reward", "quest_count")
     readonly_fields = ("quest_count",)
     autocomplete_fields = ("reward",)
     ordering = ("position",)
@@ -282,7 +282,7 @@ class EventPassAdmin(admin.ModelAdmin):
             "When",
             {
                 "description": "Quests only progress between these dates. Claiming can stay open a little longer.",
-                "fields": ("starts_at", "ends_at", "claim_until"),
+                "fields": ("starts_at", "ends_at", "claim_until", "early_starts_at"),
             },
         ),
         ("Where", {"fields": ("main_server_only", "main_server_id")}),
@@ -355,7 +355,18 @@ class PassTierAdmin(admin.ModelAdmin):
     list_editable = ("position",)
     search_fields = ("name",)
     ordering = ("event_pass__position", "position")
-    fields = ("event_pass", "name", "emoji", "description", "position", "unlock_logic", "locked_message", "reward")
+    fields = (
+        "event_pass",
+        "name",
+        "emoji",
+        "description",
+        "position",
+        "unlock_logic",
+        "locked_message",
+        "reward",
+        "announce",
+        "completion_message",
+    )
 
     @admin.display(description="Requirements")
     def requirement_count(self, obj: PassTier) -> int:

@@ -10,6 +10,11 @@ import discord
 from django.conf import settings as django_settings
 from django.core.validators import MaxValueValidator, RegexValidator
 from django.db import models
+
+if TYPE_CHECKING:
+    # only ever named in annotations; importing them for real would make the settings app depend on the bot
+    from ballsdex.core.bot import BallsDexBot
+    from bd_models.models import Ball
 from django.db.models import F, Q
 from django.db.models.signals import post_init
 from django.dispatch import receiver
@@ -213,6 +218,14 @@ class Settings(models.Model):
         default=False,
     )
 
+    pass_auto_claim = models.BooleanField(
+        verbose_name="auto-claim event pass rewards",
+        help_text="Give the reward of an event pass quest the moment it is completed, instead of waiting for "
+        "the player to press Claim. Tier and end-of-pass rewards keep their button: those are the moments "
+        "worth a click. A quest already set to give its reward right away does so either way.",
+        default=False,
+    )
+
     # spawn algorithm details
     spawn_chance_min = models.PositiveIntegerField(
         help_text="Minimum base chance value to spawn a ball. Lower value leads to more spawn.", default=40
@@ -346,7 +359,7 @@ class Settings(models.Model):
                 )[0]
 
     def get_formatted_message(
-        self, category: PromptMessage.PromptType, model: Ball, mention: str, bot: BallsDexBot, **kwargs: str
+        self, category: PromptMessage.PromptType, model: "Ball", mention: str, bot: "BallsDexBot", **kwargs: str
     ):
         message = self.get_random_message(category)
         try:

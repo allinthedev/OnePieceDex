@@ -14,6 +14,7 @@ from django.db import transaction
 from django.utils import timezone
 from pack_models.models import PackBonusRole, PackResource, PackSettings
 
+from ballsdex.core.game_events import Event, EventContext, bus, command_did_nothing
 from ballsdex.core.utils.utils import member_role_ids
 from bd_models.models import Ball, BallInstance, Player
 from settings.models import settings
@@ -148,6 +149,7 @@ class Pack(commands.GroupCog):
         role_bonus = await self._role_bonus(interaction)
         claim = await sync_to_async(claim_daily_pack)(player.pk, role_bonus, self.pack_settings)
         if not claim.allowed:
+            command_did_nothing(interaction)
             await interaction.response.send_message(
                 f"You've used all daily packs. Come back {format_dt(claim.cooldown_until, style='R')}!",  # type: ignore
                 ephemeral=True,
@@ -189,6 +191,12 @@ class Pack(commands.GroupCog):
         file = discord.File(buffer, "card.webp")
         embed.set_image(url="attachment://card.webp")
         await interaction.followup.send(embed=embed, file=file)
+        await bus.dispatch(
+            player,
+            Event.PACK_STREAK,
+            context=EventContext(streak=claim.streak, server_id=interaction.guild_id),
+            channel_id=interaction.channel_id,
+        )
 
     @app_commands.command(name="weekly")
     async def weekly(self, interaction: discord.Interaction["BallsDexBot"]):

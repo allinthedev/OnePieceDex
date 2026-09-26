@@ -109,6 +109,18 @@ def _describe_obtain(quest: Quest) -> str:
     return f"Obtain {_treasures(quest, quest.target)}{_where(quest)}."
 
 
+def _describe_own(quest: Quest) -> str:
+    return f"Own {_treasures(quest, quest.target)}."
+
+
+def _describe_currency_streak(quest: Quest) -> str:
+    return f"Claim your daily {settings.currency_plural} {quest.target} days in a row."
+
+
+def _describe_pack_streak(quest: Quest) -> str:
+    return f"Claim your daily pack {quest.target} days in a row."
+
+
 def _describe_command(quest: Quest) -> str:
     return f"Use /{quest.command_name or '?'}{_times(quest.target)}{_where(quest)}."
 
@@ -255,7 +267,7 @@ TYPES: dict[str, TypeDefinition] = {
         TypeDefinition(
             QuestType.COMMAND,
             frozenset({Event.COMMAND}),
-            ("command_name", "main_server_only"),
+            ("command_name", "require_command_effect", "main_server_only"),
             "Number of uses",
             'Counts the uses of one slash command, like "treasures list" to open the inventory.',
             _describe_command,
@@ -264,7 +276,15 @@ TYPES: dict[str, TypeDefinition] = {
         TypeDefinition(
             QuestType.TRADE,
             frozenset({Event.TRADE}),
-            ("partner_discord_id", "min_currency", "must_receive_treasure", "ball", "special", "any_special"),
+            (
+                "partner_discord_id",
+                "with_friend",
+                "min_currency",
+                "must_receive_treasure",
+                "ball",
+                "special",
+                "any_special",
+            ),
             "Number of trades",
             "Counts completed trades. The treasure filters apply to what the player receives.",
             _describe_trade,
@@ -272,7 +292,7 @@ TYPES: dict[str, TypeDefinition] = {
         TypeDefinition(
             QuestType.TRADE_TREASURES,
             frozenset({Event.TRADE}),
-            ("in_one_trade", "partner_discord_id"),
+            ("in_one_trade", "partner_discord_id", "with_friend"),
             "Number of treasures exchanged",
             "Counts the treasures changing hands in the player's trades, given and received. A trade where only "
             "one side gives something is a gift and doesn't count.",
@@ -282,7 +302,7 @@ TYPES: dict[str, TypeDefinition] = {
         TypeDefinition(
             QuestType.GIVE_TREASURES,
             frozenset({Event.GIFT}),
-            TREASURE_FILTERS + ("partner_discord_id", "main_server_only"),
+            TREASURE_FILTERS + ("partner_discord_id", "with_friend", "main_server_only"),
             "Number of treasures given",
             "Counts the treasures the player gives away with the give command. Set a partner to ask for a present "
             "to one person in particular.",
@@ -291,7 +311,7 @@ TYPES: dict[str, TypeDefinition] = {
         TypeDefinition(
             QuestType.FRIEND,
             frozenset({Event.FRIEND}),
-            ("partner_discord_id",),
+            ("partner_discord_id", "with_friend"),
             "Number of new friends",
             "Counts the friendships made during the event, not the ones the player already had.",
             _describe_friend,
@@ -310,7 +330,7 @@ TYPES: dict[str, TypeDefinition] = {
         TypeDefinition(
             QuestType.GIVE_CURRENCY,
             frozenset({Event.CURRENCY_SENT}),
-            ("partner_discord_id", "min_currency"),
+            ("partner_discord_id", "with_friend", "min_currency"),
             "Number of gifts, or berries given",
             "Counts the berries the player gives away with the give command.",
             _describe_give,
@@ -320,7 +340,7 @@ TYPES: dict[str, TypeDefinition] = {
         TypeDefinition(
             QuestType.RECEIVE_CURRENCY,
             frozenset({Event.CURRENCY_RECEIVED}),
-            ("partner_discord_id", "min_currency"),
+            ("partner_discord_id", "with_friend", "min_currency"),
             "Number of gifts, or berries received",
             "Counts the berries the player receives from someone, a player or an admin.",
             _describe_receive,
@@ -335,6 +355,34 @@ TYPES: dict[str, TypeDefinition] = {
             "Counts the times a catch also gives berries, or how many berries those catches gave.",
             _describe_catch_currency,
             measures=BERRY_MEASURES,
+        ),
+        TypeDefinition(
+            QuestType.OWN_TREASURES,
+            frozenset({Event.CATCH, Event.OBTAIN}),
+            TREASURE_FILTERS,
+            "Number owned",
+            "Counts what the player has in their collection right now, not what they just did: "
+            '"own 10 treasures of T50 or rarer". Checked again every time they get one.',
+            _describe_own,
+        ),
+        TypeDefinition(
+            QuestType.CURRENCY_STREAK,
+            frozenset({Event.CURRENCY_STREAK}),
+            ("main_server_only",),
+            "Days in a row",
+            "Counts the streak of daily berry claims the player is on, not how many times they claimed. "
+            "A streak that breaks starts the count again.",
+            _describe_currency_streak,
+            filters_instances=False,
+        ),
+        TypeDefinition(
+            QuestType.PACK_STREAK,
+            frozenset({Event.PACK_STREAK}),
+            ("main_server_only",),
+            "Days in a row",
+            "Counts the streak of daily pack claims the player is on. A streak that breaks starts again.",
+            _describe_pack_streak,
+            filters_instances=False,
         ),
         TypeDefinition(
             QuestType.SPEND_CURRENCY,

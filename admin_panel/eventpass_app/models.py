@@ -51,6 +51,9 @@ class QuestType(models.TextChoices):
     AUCTION_CREATE = "auction_create", "List treasures on the auction house"
     AUCTION_BID = "auction_bid", "Place bids on the auction house"
     AUCTION_WON = "auction_won", "Win auctions"
+    CURRENCY_STREAK = "currency_streak", "Reach a daily berry streak"
+    PACK_STREAK = "pack_streak", "Reach a daily pack streak"
+    OWN_TREASURES = "own_treasures", "Own treasures (how many you have, not what you do)"
 
 
 class Measure(models.TextChoices):
@@ -361,6 +364,13 @@ class EventPass(models.Model):
     )
 
     starts_at = models.DateTimeField(help_text="Nothing progresses before this date.")
+    early_starts_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="early start",
+        help_text="An earlier date for the players meeting a condition marked as granting early access below. "
+        "Leave empty for a pass that opens for everybody at once.",
+    )
     ends_at = models.DateTimeField(help_text="Quests stop progressing after this date.")
     claim_until = models.DateTimeField(
         null=True,
@@ -435,10 +445,27 @@ class EventPass(models.Model):
 
     def running(self, now: datetime | None = None) -> bool:
         """
-        Whether quests can progress right now.
+        Whether quests can progress right now, for a player with no early access.
         """
         now = now or timezone.now()
         return self.status == self.Status.ACTIVE and self.starts_at <= now <= self.ends_at
+
+    def open_early(self, now: datetime | None = None) -> bool:
+        """
+        Whether the pass has opened for the players let in early, but not yet for everybody.
+
+        The engine uses it to let their quests move while the pass still looks closed to the rest.
+        """
+        now = now or timezone.now()
+        if self.early_starts_at is None or self.status != self.Status.ACTIVE:
+            return False
+        return self.early_starts_at <= now < self.starts_at
+
+    def window_open(self, now: datetime | None = None) -> bool:
+        """
+        Whether the pass is open to anybody at all, early birds included.
+        """
+        return self.running(now) or self.open_early(now)
 
     def claimable(self, now: datetime | None = None) -> bool:
         """
@@ -477,6 +504,12 @@ class PassRequirement(models.Model):
         max_length=64, blank=True, default="", help_text="Only used to name the role in the message players read."
     )
     count = models.PositiveBigIntegerField(default=0, help_text="The number of treasures or berries, for the others.")
+    grants_early_access = models.BooleanField(
+        verbose_name="lets them in early",
+        help_text="A player meeting this condition may start at the pass's early start date, before everybody "
+        "else. Ignored when the pass has no early start.",
+        default=False,
+    )
 
     @property
     def counts_live(self) -> bool:
@@ -540,6 +573,18 @@ class PassTier(models.Model):
     )
     locked_message = models.TextField(
         blank=True, default="", help_text="Shown while the tier is locked. Leave empty for the generated text."
+    )
+    announce = models.CharField(
+        max_length=9,
+        choices=Announce.choices,
+        default=Announce.PUBLIC,
+        verbose_name="completion message",
+        help_text="Where the message goes when a player finishes this tier: in the channel for everyone, in "
+        "the channel but only for them, in their DMs, or nowhere. Finishing a tier is worth showing off, so "
+        "this is public by default even when the quests inside it are not.",
+    )
+    completion_message = models.TextField(
+        blank=True, default="", help_text="Shown when the tier is finished. Leave empty for the default text."
     )
     reward = models.ForeignKey(
         Reward,
@@ -750,6 +795,12 @@ class Quest(models.Model):
     partner_discord_id = models.BigIntegerField(
         null=True, blank=True, help_text="Only count actions involving this Discord user (ID)."
     )
+    with_friend = models.BooleanField(
+        verbose_name="only with a friend",
+        help_text="Only count it when the other player is on the friend list. A good way to give the friend "
+        "commands a reason to exist, since nothing else in the bot points at them.",
+        default=False,
+    )
     min_currency = models.PositiveBigIntegerField(
         null=True, blank=True, help_text="Each action must move at least this many berries to count."
     )
@@ -764,6 +815,13 @@ class Quest(models.Model):
         blank=True,
         default="",
         help_text='Full name of the slash command, without the slash: "treasures list" to open the inventory.',
+    )
+    require_command_effect = models.BooleanField(
+        verbose_name="only count when it worked",
+        help_text="Only count the command when it actually did something. A /daily run while it is still on "
+        "cooldown, a shop with nothing left or a purchase the player could not afford then do not count. "
+        "Commands that never report an outcome are always counted.",
+        default=False,
     )
     item = models.ForeignKey(
         Item,
