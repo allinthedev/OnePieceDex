@@ -4,15 +4,15 @@
     "name": "Awakened Fruit"
   },
   "card": {
-    "tradeable": true,
+    "tradeable": false,
     "no_special": false,
     "enabled": true,
     "price": null
   },
   "requirement": {
-    "delete_balls": true
+    "delete_balls": false
   },
-  "notes": "One craft per collector for the Awakened Fruit tier: the collector's own treasure, in the given amount. `treasure` is the card the recipe asks for, `collector` is the collector it is attached to (they differ for a few of them), `listed_as` keeps the name as it was written in the source list when it needed correcting, and `tier_1` is that collector's existing Tier 1 amount, for comparison only. `requirement.delete_balls` true means the copies are used up when the card is claimed, like the Elemental recipes; set it to false to keep them (the card is then watched and can be taken back).",
+  "notes": "One craft per collector for the Awakened Fruit tier: the collector's own treasure, in the given amount. `treasure` is the card the recipe asks for, `collector` is the collector it is attached to (they differ for a few of them), `listed_as` keeps the name as it was written in the source list when it needed correcting, and `tier_1` is that collector's existing Tier 1 amount, for comparison only. The copies are kept, never used up (`requirement.delete_balls` false), so the claimed card is watched and taken back if its owner lets the collection go, and it cannot be traded (`card.tradeable` false).",
   "recipes": [
     {
       "collector": "Akuma no Mi (Devil's Fruit)",
