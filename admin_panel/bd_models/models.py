@@ -24,7 +24,7 @@ from ballsdex.core.discord import View
 from ballsdex.core.image_generator.image_gen import draw_card
 from settings.models import settings
 
-from .enums import DonationPolicy, FriendPolicy, MentionPolicy, PrivacyPolicy, TradeCooldownPolicy
+from .enums import DonationPolicy, FriendPolicy, MentionPolicy, PrivacyPolicy, SpecialLayer, TradeCooldownPolicy
 
 if TYPE_CHECKING:
     from django.db.models.fields.files import ImageFieldFile
@@ -278,6 +278,14 @@ class Special(models.Model):
     rarity = models.FloatField(help_text="Value between 0 and 1, chances of using this special background.")
     emoji = models.CharField(max_length=20, blank=True, null=True, help_text="A unicode character")
     background = models.ImageField(max_length=200, blank=True, null=True, help_text="1428x2000 PNG image")
+    layer = models.CharField(
+        max_length=16,
+        choices=SpecialLayer.choices,
+        default=SpecialLayer.BACKGROUND,
+        help_text="Where the image above is drawn. A background replaces the regime's one and the card art "
+        "goes over it; a foreground is laid over the finished card, so it needs transparency. The name, "
+        "ability, stats and credits always stay on top of both.",
+    )
     tradeable = models.BooleanField(help_text="Whether balls of this event can be traded", default=True)
     hidden = models.BooleanField(help_text="Hides the event from user commands", default=False)
     credits = models.CharField(max_length=64, help_text="Author of the special event artwork", null=True)
@@ -291,6 +299,13 @@ class Special(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def overlay(self) -> bool:
+        """
+        Whether this special's art is laid over the card instead of being the background it is drawn on.
+        """
+        return self.layer == SpecialLayer.FOREGROUND
 
 
 class Ball(models.Model):
@@ -576,9 +591,24 @@ class BallInstance(models.Model):
         return self.countryball.health + bonus
 
     @property
-    def special_card(self) -> "ImageFieldFile | None":
-        if self.specialcard:
+    def special_background(self) -> "ImageFieldFile | None":
+        """
+        The image the whole card is drawn on when the special takes the regime background's place, None when
+        there is no special or when it lays its art over the card instead.
+        """
+        if self.specialcard and not self.specialcard.overlay:
             return self.specialcard.background or self.countryball.collection_card
+        return None
+
+    @property
+    def special_overlay(self) -> "ImageFieldFile | None":
+        """
+        The special's art laid over the finished card, for the specials that asked for the upper layer. Such a
+        special without art of its own has nothing to lay down, and the card keeps the regime's background.
+        """
+        if self.specialcard and self.specialcard.overlay:
+            return self.specialcard.background or None
+        return None
 
     @property
     def countryball(self) -> Ball:

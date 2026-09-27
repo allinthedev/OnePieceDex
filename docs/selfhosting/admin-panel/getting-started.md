@@ -152,6 +152,7 @@ Specials can have a start and end date to indicate that it will be limited in ti
 - `Rarity`: Defines the odds of getting that special. **This must be between 0 and 1 included.** Check [this page](../misc/rarity-mechanism.md#special-rarity) to understand how rarity works.
 - `Emoji`: The emoji to place next to the ball instance to identify it. This must be a single unicode emoji, Discord emojis cannot be used for technical reasons.
 - `Background`: The new background to apply, this must be **precisely** 1428x2000 pixels. If the dimensions are off, the card generation will break.
+- `Layer`: Where that image goes. `Background` replaces the regime's background and the ball's card art is drawn over it, as it always was. `Foreground` keeps the regime's background and lays the image over the finished card instead, so use a PNG with transparency: whatever is opaque hides the card art below it. The name, ability, stats and credits are written above both layers either way.
 - `Start date` and `End date`: Optional date range to keep this event active. Both values are optional. Not setting a start date will make an event active immediately upon reload.
 
 #### Advanced
