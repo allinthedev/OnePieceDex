@@ -1,60 +1,425 @@
 {
   "name": "Halloween 2026",
   "emoji": "🎃",
-  "description": "Gecko Moria's haunted ship drifted in for Halloween. Every reward is a Halloween 2026 card, and finishing the five quests earns a Halloween Yomi Yomi no Mi.",
+  "description": "Thriller Bark has dropped anchor for the whole month. Four nights of quests, thirty-six trials, and a crew of Halloween 2026 cards to drag back from the fog.",
   "colour": "#FF7518",
-  "starts_at": "2026-10-25T00:01:00Z",
-  "ends_at": "2026-11-01T23:59:00Z",
-  "claim_until": "2026-11-08T23:59:00Z",
+  "starts_at": "2026-10-01T00:01:00Z",
+  "ends_at": "2026-10-31T23:59:00Z",
+  "claim_until": "2026-11-07T23:59:00Z",
+  "position": 1,
   "card_special": "Halloween 2026",
+  "final_reward": {"cards": ["Brook"]},
+  "final_message": "Every shadow on this ship is yours now. Happy Halloween, and yohohoho!",
+  "notes": "Placeholders to replace before launch: the two craft quests point at the Perona and Gecko Moria collectors until the Halloween crafts exist (The Doctor's Assistant, Nightmare Crafting). The Halloween 2026 special still has a rarity of 0: raise it or no catch-a-Halloween quest can be done. Position 1 leaves the Birthday Voyage (position 0) as the default pass while both run.",
   "tiers": [
     {
-      "name": "Thriller Bark",
-      "emoji": "<:ThrillerBark:1462955556862955521>",
-      "description": "Moria is stealing shadows again. Survive the night and finish every quest to claim the Yomi Yomi no Mi.",
-      "reward": {"cards": ["Yomi Yomi no Mi (Revive Revive)"]},
+      "name": "The Fog Rolls In",
+      "emoji": "<:ThrillerBarkPirates:1453876316788101268>",
+      "description": "A ship the size of an island slides out of the fog. Nobody remembers seeing it arrive. Six trials to prove you belong aboard.",
+      "reward": {"cards": ["Shimotsuki Ryuma (Zombie)"]},
+      "announce": "public",
+      "completion_message": "Thriller Bark is boarded, and Ryuma the zombie samurai rises on your side. ⚔️",
       "quests": [
         {
           "name": "Trick or Treat",
-          "emoji": "<:Cindry:1485721573028794368>",
-          "description": "Trick or treat! Give a treasure to another player.",
+          "emoji": "<:Nakama:1480629699649736745>",
+          "description": "Trick or treat! Give a treasure to someone on your friend list.",
           "type": "give_treasures",
-          "reward": {"cards": ["Victoria Cindry"]}
+          "with_friend": true,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 1500}
         },
         {
-          "name": "Zombie Walk",
-          "emoji": "<:Ryuma:1500825532621656075>",
-          "description": "The dead walk the deck tonight. Catch 20 treasures.",
+          "name": "Candy Bag",
+          "emoji": "<:KibiDango:1430072633931726878>",
+          "description": "Fill your bag: catch 15 treasures.",
+          "type": "catch",
+          "goal": 15,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 2000}
+        },
+        {
+          "name": "First Fright",
+          "emoji": "<:BatBat:1517671413723562116>",
+          "description": "Something moved in the rigging. Catch a Halloween 2026 treasure.",
+          "type": "catch",
+          "special": "Halloween 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["S-Bat"]}
+        },
+        {
+          "name": "Costume Shopping",
+          "emoji": "<:PocketPocket:1433013547293605908>",
+          "description": "No costume, no candy. Buy 2 packs, any packs.",
+          "type": "pack_buy",
+          "goal": 2,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 2500}
+        },
+        {
+          "name": "Grave Goods",
+          "emoji": "<:TreasureChest:1477305592950558892>",
+          "description": "Buy a Thriller Bark extras pack: the dead keep the good stuff.",
+          "type": "pack_buy",
+          "item": "Thriller Bark extras",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"mode": "choice", "pick": 1, "cards": ["Absalom", "Kumashi"], "berries": 1000}
+        },
+        {
+          "name": "Sweet Tooth",
+          "emoji": "<:CreamCream:1514967893283045408>",
+          "description": "Claim your daily pack three days in a row.",
+          "type": "pack_streak",
+          "goal": 3,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 2000}
+        },
+        {
+          "name": "The Sleeping Giant",
+          "emoji": "<:OarsJr:1485707542700101672>",
+          "description": "Something enormous snores below deck. Catch Little Oars Jr.",
+          "type": "catch",
+          "ball": "Little Oars Jr.",
+          "announce": "ephemeral",
+          "reward": {"cards": ["Rosamygale Grauvogeli (Ancient Spider)"], "berries": 1000}
+        },
+        {
+          "name": "Séance",
+          "emoji": "<:SpiderSpider:1502368479989202997>",
+          "description": "Some doors only open in pairs. Complete 2 trades with friends.",
+          "type": "trade",
+          "goal": 2,
+          "with_friend": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Kumo Kumo no Mi (Spider Spider)"]}
+        },
+        {
+          "name": "Weekly Offering",
+          "emoji": "<:WantedPoster:1477411143072092243>",
+          "description": "The ship feeds every week. Catch 20 treasures, and again next week.",
           "type": "catch",
           "goal": 20,
-          "reward": {"cards": ["Shimotsuki Ryuma (Zombie)"]}
+          "reset": "weekly",
+          "announce": "ephemeral",
+          "reward": {"mode": "random", "pick": 1, "pool": {"min_rarity": 150}, "berries": 3000}
+        }
+      ]
+    },
+    {
+      "name": "Hogback's Laboratory",
+      "emoji": "<:Hogback:1547145434567413780>",
+      "description": "Behind the mansion doors, a surgeon stitches corpses into soldiers. He needs parts, money and an assistant. You qualify.",
+      "reward": {"cards": ["Dr.Hogback"]},
+      "announce": "public",
+      "completion_message": "The laboratory falls quiet, and the doctor walks out with you. 🧟",
+      "requirements": ["finish_previous", {"date": "2026-10-08T00:01:00Z"}],
+      "quests": [
+        {
+          "name": "Spare Parts",
+          "emoji": "<:Bakotsu:1440575732051873866>",
+          "description": "The doctor is not picky. Catch 30 treasures.",
+          "type": "catch",
+          "goal": 30,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 3000}
         },
         {
-          "name": "Shadow Harvest",
-          "emoji": "<:Moria:1485704639394484545>",
-          "description": "Moria is after your shadow. Catch 3 treasures with a special, Halloween ones included.",
+          "name": "Fresh Specimens",
+          "emoji": "<:Doll:1475999250096721940>",
+          "description": "Only the freshest will do. Catch 3 Halloween 2026 treasures.",
           "type": "catch",
           "goal": 3,
-          "any_special": true,
-          "reward": {"cards": ["Gecko Moria"]}
+          "special": "Halloween 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Doll"]}
         },
         {
-          "name": "Doctor's Bill",
-          "emoji": "<:Hogback:1547145434567413780>",
-          "description": "Dr. Hogback's surgeries don't come cheap. Spend 10,000 berries, anywhere.",
+          "name": "Surgery Bill",
+          "emoji": "<:GildTesoro:1461080899172044894>",
+          "description": "Hogback's surgeries don't come cheap. Spend 25,000 berries, anywhere.",
           "type": "spend_currency",
           "measure": "amount",
-          "goal": 10000,
-          "reward": {"cards": ["Dr.Hogback"]}
+          "goal": 25000,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 3500}
         },
         {
-          "name": "Haunted Ship",
-          "emoji": "<:ThrillerBarkPirates:1453876316788101268>",
-          "description": "Only the bravest crew makes it aboard Thriller Bark. Catch 5 Halloween 2026 treasures.",
+          "name": "Black Market",
+          "emoji": "<:CaesarClown:1485705794816180404>",
+          "description": "Buy 2 items from the merchant. No questions asked.",
+          "type": "merchant_buy",
+          "goal": 2,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Caesar Clown"]}
+        },
+        {
+          "name": "Zombie Army",
+          "emoji": "<:KageKage:1428997084828143646>",
+          "description": "Raise your own crew: have 6 Halloween 2026 treasures in your collection.",
+          "type": "own_treasures",
+          "goal": 6,
+          "special": "Halloween 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Dr. Kureha"]}
+        },
+        {
+          "name": "Hunting Party",
+          "emoji": "<:HoundHound:1433010122388406282>",
+          "description": "Nobody hunts alone on this ship. Exchange 6 treasures in trades with friends.",
+          "type": "trade_treasures",
+          "goal": 6,
+          "with_friend": true,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 3000}
+        },
+        {
+          "name": "The Doctor's Assistant",
+          "emoji": "<:Perona:1485703758015893524>",
+          "description": "Assemble something of your own: craft the Perona collector card.",
+          "type": "craft",
+          "collector": "Perona",
+          "announce": "ephemeral",
+          "notes": "Placeholder: swap the collector for the Halloween craft once it exists, and decide whether it becomes mandatory.",
+          "reward": {"cards": ["Fukurou"], "berries": 4000}
+        },
+        {
+          "name": "Ghost Stories",
+          "emoji": "<:1500Berry:1489367084344541255>",
+          "description": "Pay your friends for their silence: give 10,000 berries to friends.",
+          "type": "give_currency",
+          "measure": "amount",
+          "goal": 10000,
+          "with_friend": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 5000}
+        },
+        {
+          "name": "Midnight Snack",
+          "emoji": "<:LampLamp:1435979224958767207>",
+          "description": "Claim your daily berries five days in a row.",
+          "type": "currency_streak",
+          "goal": 5,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Hoya Hoya no Mi (Lamp Lamp)"]}
+        }
+      ]
+    },
+    {
+      "name": "The Shadow Thief",
+      "emoji": "<:KageKage:1428997084828143646>",
+      "description": "Scissors snip in the dark and your shadow is gone. Take enough of them back and the thief will notice you.",
+      "reward": {"cards": ["Gecko Moria"]},
+      "announce": "public",
+      "completion_message": "Your shadow is back where it belongs, and Moria noticed. 🌑",
+      "requirements": ["finish_previous", {"date": "2026-10-15T00:01:00Z"}],
+      "quests": [
+        {
+          "name": "Stolen Shadows",
+          "emoji": "<:Shirley:1485362702217121926>",
+          "description": "Catch 6 Halloween 2026 treasures.",
+          "type": "catch",
+          "goal": 6,
+          "special": "Halloween 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Madam Shyarly"]}
+        },
+        {
+          "name": "Graveyard Shift",
+          "emoji": "<:Skull:1525267114082963586>",
+          "description": "Work the night through: catch 60 treasures.",
+          "type": "catch",
+          "goal": 60,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 7000}
+        },
+        {
+          "name": "Shadow Collector",
+          "emoji": "<:HoroHoro:1428678955396890715>",
+          "description": "Have 12 Halloween 2026 treasures in your collection.",
+          "type": "own_treasures",
+          "goal": 12,
+          "special": "Halloween 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"mode": "choice", "pick": 1, "cards": ["Onimaru", "Shiku Shiku no Mi (Sick Sick)", "Giro Giro no Mi (Glare Glare)"]}
+        },
+        {
+          "name": "Buggy's Haunted Shop",
+          "emoji": "<:Buggy:1475102213821960274>",
+          "description": "Buy 3 treasures from Buggy's shop before he notices the smell.",
+          "type": "shop_buy",
+          "goal": 3,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 6000}
+        },
+        {
+          "name": "Blood Pact",
+          "emoji": "<:Nakama:1480629699649736745>",
+          "description": "Seal it with your crew: exchange 10 treasures in trades with friends.",
+          "type": "trade_treasures",
+          "goal": 10,
+          "with_friend": true,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"mode": "random", "pick": 1, "pool": {"min_rarity": 120}, "berries": 3000}
+        },
+        {
+          "name": "Bone Collector",
+          "emoji": "<:Cerberus:1475257779454218471>",
+          "description": "Be quicker than the hounds: catch 5 treasures less than 7 seconds after they appear.",
           "type": "catch",
           "goal": 5,
+          "max_catch_seconds": 7,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 5000}
+        },
+        {
+          "name": "Negative Hollow",
+          "emoji": "<:Perona:1485703758015893524>",
+          "description": "A ghost princess floats through the wall. Catch Perona.",
+          "type": "catch",
+          "ball": "Perona",
+          "announce": "ephemeral",
+          "reward": {"berries": 6000}
+        },
+        {
+          "name": "Auction of the Damned",
+          "emoji": "<:DiceDice:1482510352758341713>",
+          "description": "Outbid the dead: win 2 auctions on the auction house.",
+          "type": "auction_won",
+          "goal": 2,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Kurozumi Kanjuro"]}
+        },
+        {
+          "name": "All Souls",
+          "emoji": "<:GlareGlare:1472892891440611483>",
+          "description": "The thief counts what you keep: have 25 treasures of T60 or rarer in your collection.",
+          "type": "own_treasures",
+          "goal": 25,
+          "max_rarity": 60,
+          "announce": "ephemeral",
+          "reward": {"berries": 8000}
+        }
+      ]
+    },
+    {
+      "name": "Nightmare on Thriller Bark",
+      "emoji": "<:ThrillerBark:1462955556862955521>",
+      "description": "The Warlord stops laughing. Whatever walks the deck tonight was built to stop you, and dawn is still a week away.",
+      "reward": {"cards": ["Thriller Bark"]},
+      "announce": "public",
+      "completion_message": "The haunted island is yours. Sail it home before dawn. 🏴‍☠️",
+      "requirements": ["finish_previous", {"date": "2026-10-22T00:01:00Z"}],
+      "quests": [
+        {
+          "name": "Master of Shadows",
+          "emoji": "<:Moria:1485704639394484545>",
+          "description": "Catch 10 Halloween 2026 treasures.",
+          "type": "catch",
+          "goal": 10,
           "special": "Halloween 2026",
-          "reward": {"cards": ["Thriller Bark"]}
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 10000}
+        },
+        {
+          "name": "Moria's Collection",
+          "emoji": "<:Cindry:1485721573028794368>",
+          "description": "Match the Warlord: have 20 Halloween 2026 treasures in your collection.",
+          "type": "own_treasures",
+          "goal": 20,
+          "special": "Halloween 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Doctor Hiriluk"]}
+        },
+        {
+          "name": "Warlord's Wealth",
+          "emoji": "<:GildTesoro:1461080899172044894>",
+          "description": "Buy your way through the nightmare: spend 75,000 berries.",
+          "type": "spend_currency",
+          "measure": "amount",
+          "goal": 75000,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Charlotte Lola"]}
+        },
+        {
+          "name": "Rare Hunt",
+          "emoji": "<:WantedPoster:1477411143072092243>",
+          "description": "Only trophies count now: catch 3 treasures of T40 or rarer.",
+          "type": "catch",
+          "goal": 3,
+          "max_rarity": 40,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"berries": 15000}
+        },
+        {
+          "name": "Crew of the Damned",
+          "emoji": "<:Nakama:1480629699649736745>",
+          "description": "Nobody leaves this ship alone: complete 10 trades with friends.",
+          "type": "trade",
+          "goal": 10,
+          "with_friend": true,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {"mode": "random", "pick": 2, "pool": {"min_rarity": 100}, "berries": 5000}
+        },
+        {
+          "name": "Nightmare Crafting",
+          "emoji": "<:Hogback:1547145434567413780>",
+          "description": "Build your own monster: craft the Gecko Moria collector card.",
+          "type": "craft",
+          "collector": "Gecko Moria",
+          "announce": "ephemeral",
+          "notes": "Placeholder: swap the collector for the second Halloween craft once it exists.",
+          "reward": {"berries": 12000}
+        },
+        {
+          "name": "The Ghost Ship",
+          "emoji": "<:ThrillerBark:1462955556862955521>",
+          "description": "The island itself drifts past once a year. Catch Thriller Bark.",
+          "type": "catch",
+          "ball": "Thriller Bark",
+          "announce": "ephemeral",
+          "reward": {"mode": "choice", "pick": 1, "cards": ["Absalom", "Kumashi", "Charlotte Lola"], "berries": 10000}
+        },
+        {
+          "name": "All Hallows' Eve",
+          "emoji": "<:DenDenMushi:1477297846024933511>",
+          "description": "Never miss a night: claim your daily berries fourteen days in a row.",
+          "type": "currency_streak",
+          "goal": 14,
+          "announce": "ephemeral",
+          "reward": {"cards": ["Giro Giro no Mi (Glare Glare)"], "berries": 8000}
+        },
+        {
+          "name": "Last Call at Buggy's",
+          "emoji": "<:SakeBottle:1477076566960771225>",
+          "description": "Sell the bones you don't need: earn 30,000 berries selling treasures to Buggy.",
+          "type": "sell",
+          "measure": "amount",
+          "goal": 30000,
+          "announce": "ephemeral",
+          "reward": {"berries": 6000}
         }
       ]
     }
