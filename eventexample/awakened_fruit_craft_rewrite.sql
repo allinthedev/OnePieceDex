@@ -1,6 +1,7 @@
--- Awakened Fruit (collector tier level 5): one craft per collector, its own treasure in the listed
--- amount. Generated from eventexample/awakened_fruit_craft.json. Safe to run twice: collectors that already
--- have the tier or the recipe are skipped. To change what is already loaded, use the rewrite script instead.
+-- Awakened Fruit (collector tier level 5): rewrite what is already loaded so it matches
+-- eventexample/awakened_fruit_craft.json. Run it after changing an amount or a setting in the dump, or to
+-- correct an earlier load. It updates what is there, adds what is missing, and never deletes a recipe.
+-- Safe to run twice, and it writes nothing at all if it stops on an error.
 BEGIN;
 
 DO $$
@@ -141,21 +142,64 @@ BEGIN
   END IF;
 END $$;
 
--- the tier itself, one per collector
+-- a collector with several recipes on this tier would be rewritten into something wrong: stop instead
+DO $$
+DECLARE crowded text;
+BEGIN
+  SELECT string_agg(c.name, ', ') INTO crowded
+  FROM awakened_recipe r
+  JOIN collector c ON c.name = r.collector_name
+  WHERE (SELECT count(*) FROM collectorrequirement q WHERE q.collector_id = c.id AND q.level_id = 5) > 1;
+  IF crowded IS NOT NULL THEN
+    RAISE EXCEPTION 'these collectors have more than one recipe on tier 5, fix them by hand first: %', crowded;
+  END IF;
+END $$;
+
+SELECT 'before' AS step,
+  (SELECT count(*) FROM collectortier WHERE level_id = 5) AS tiers,
+  (SELECT count(*) FROM collectortier WHERE level_id = 5 AND tradeable) AS tradeable_tiers,
+  (SELECT count(*) FROM collectorrequirement WHERE level_id = 5) AS recipes,
+  (SELECT count(*) FROM collectorrequirement WHERE level_id = 5 AND delete_balls) AS consuming_recipes,
+  (SELECT count(*) FROM collectorinstance WHERE level_id = 5 AND revoked_at IS NULL) AS cards_claimed;
+
+-- 1. the tier of every listed collector
+UPDATE collectortier t
+SET tradeable = false, no_special = false, enabled = true, price = NULL
+FROM awakened_recipe r
+JOIN collector c ON c.name = r.collector_name
+WHERE t.collector_id = c.id AND t.level_id = 5;
+
 INSERT INTO collectortier (collector_id, level_id, special_id, no_special, tradeable, frame_key, enabled, price)
 SELECT c.id, 5, NULL, false, false, '', true, NULL
 FROM awakened_recipe r
 JOIN collector c ON c.name = r.collector_name
 WHERE NOT EXISTS (SELECT 1 FROM collectortier t WHERE t.collector_id = c.id AND t.level_id = 5);
 
--- its recipe: that many copies of the collector's own treasure, kept, never used up
+-- 2. its recipe: the listed amount of the collector's own treasure, kept, never used up
+UPDATE collectorrequirement q
+SET amount = r.amount, delete_balls = false, ball_id = c.ball_id, special_id = NULL
+FROM awakened_recipe r
+JOIN collector c ON c.name = r.collector_name
+WHERE q.collector_id = c.id AND q.level_id = 5;
+
 INSERT INTO collectorrequirement (collector_id, level_id, ball_id, special_id, amount, delete_balls)
 SELECT c.id, 5, c.ball_id, NULL, r.amount, false
 FROM awakened_recipe r
 JOIN collector c ON c.name = r.collector_name
 WHERE NOT EXISTS (SELECT 1 FROM collectorrequirement q WHERE q.collector_id = c.id AND q.level_id = 5);
 
-SELECT count(*) AS tiers_now FROM collectortier WHERE level_id = 5;
-SELECT count(*) AS recipes_now FROM collectorrequirement WHERE level_id = 5;
+-- 3. a card already claimed keeps the flag it was given at the time: line it up with the tier
+UPDATE ballinstance b
+SET tradeable = false
+FROM collectorinstance i
+WHERE i.ball_instance_id = b.id AND i.level_id = 5 AND i.revoked_at IS NULL
+  AND b.tradeable <> false;
+
+SELECT 'after' AS step,
+  (SELECT count(*) FROM collectortier WHERE level_id = 5) AS tiers,
+  (SELECT count(*) FROM collectortier WHERE level_id = 5 AND tradeable) AS tradeable_tiers,
+  (SELECT count(*) FROM collectorrequirement WHERE level_id = 5) AS recipes,
+  (SELECT count(*) FROM collectorrequirement WHERE level_id = 5 AND delete_balls) AS consuming_recipes,
+  (SELECT count(*) FROM collectorinstance WHERE level_id = 5 AND revoked_at IS NULL) AS cards_claimed;
 
 COMMIT;
