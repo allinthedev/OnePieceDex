@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class SpecialAdmin(admin.ModelAdmin):
     save_on_top = True
     fieldsets = [
-        (None, {"fields": ["name", "catch_phrase", "rarity", "emoji", "background", "credits"]}),
+        (None, {"fields": ["name", "catch_phrase", "rarity", "emoji", "background", "layer", "credits"]}),
         (
             "Time range",
             {
@@ -28,7 +28,7 @@ class SpecialAdmin(admin.ModelAdmin):
         ("Advanced", {"fields": ["tradeable", "hidden"], "classes": ["collapse"]}),
     ]
 
-    list_display = ["name", "pk", "emoji_display", "start_date", "end_date", "rarity", "hidden"]
+    list_display = ["name", "pk", "emoji_display", "layer", "start_date", "end_date", "rarity", "hidden"]
     list_editable = ["hidden", "rarity"]
     list_filter = ["hidden", "tradeable"]
 

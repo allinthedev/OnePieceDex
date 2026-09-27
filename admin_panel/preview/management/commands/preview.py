@@ -5,7 +5,8 @@ import sys
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from ballsdex.core.image_generator.image_gen import draw_card
-from bd_models.models import Ball, BallInstance, Special
+from bd_models.enums import SpecialLayer
+from bd_models.models import Ball, BallInstance, Special, specials
 from settings.models import settings
 
 from ...utils import refresh_cache
@@ -25,6 +26,12 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--special", help="The special event's background you want to use, otherwise regime is used"
+        )
+        parser.add_argument(
+            "--layer",
+            choices=SpecialLayer.values,
+            help="Draw the special's image behind the card art or over it, whatever the special is set to. "
+            "Only for this preview, nothing is saved.",
         )
 
     async def generate_preview(self, *args, **options):
@@ -47,6 +54,12 @@ class Command(BaseCommand):
             except Special.DoesNotExist as e:
                 raise CommandError(f'No special found with the name "{special_name}"') from e
 
+        if layer := options.get("layer"):
+            if special is None:
+                raise CommandError("--layer only means something along with --special.")
+            # the card generator reads specials from the cache refreshed above, so the override goes there
+            specials[special.pk].layer = layer
+
         # use stderr to avoid piping
         self.stderr.write(
             self.style.SUCCESS(f"Generating card for {ball.country}" + (f" ({special.name})" if special else ""))
@@ -55,17 +68,18 @@ class Command(BaseCommand):
         instance = BallInstance(ball=ball, special=special)
         image, kwargs = draw_card(instance)
 
-        if sys.platform not in ("win32", "darwin") and not os.environ.get("DISPLAY"):
-            self.stderr.write(
-                self.style.WARNING(
-                    "\nThis command displays the generated card using your system's image viewer, "
-                    "but no display was detected. Are you running this inside Docker?\n"
-                    'You can append "> image.png" at the end of your command to instead write the '
-                    "image to disk, which you can then open manually.\n"
-                )
-            )
-            raise CommandError("No display detected.")
         if sys.stdout.isatty():
+            # only the viewer needs a display: piping the image to a file works anywhere, Docker included
+            if sys.platform not in ("win32", "darwin") and not os.environ.get("DISPLAY"):
+                self.stderr.write(
+                    self.style.WARNING(
+                        "\nThis command displays the generated card using your system's image viewer, "
+                        "but no display was detected. Are you running this inside Docker?\n"
+                        'You can append "> image.png" at the end of your command to instead write the '
+                        "image to disk, which you can then open manually.\n"
+                    )
+                )
+                raise CommandError("No display detected.")
             if kwargs.get("save_all", False):
                 self.stderr.write(
                     self.style.WARNING(
@@ -79,5 +93,5 @@ class Command(BaseCommand):
             image.save(sys.stdout.buffer, **kwargs)
 
     def handle(self, *args, **options):
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.generate_preview(*args, **options))
+        # Python 3.14 no longer hands out an implicit loop, so the command makes its own
+        asyncio.run(self.generate_preview(*args, **options))

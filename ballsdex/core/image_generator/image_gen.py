@@ -73,6 +73,10 @@ def draw_card(
     """
     Draw the card of a countryball instance.
 
+    The card is stacked in layers: a background (the regime's, the special's or a full art), the card art in its
+    square, then the special's own art when it asked to sit over the card rather than behind it. The name,
+    ability, stats, credits and economy icon are written last, above every layer.
+
     Parameters
     ----------
     artwork: str | None
@@ -86,22 +90,39 @@ def draw_card(
     ball = ball_instance.countryball
     ball_health = (237, 115, 101, 255)
     ball_credits = artwork_credits or ball.credits
-    special_credits = ""
-    card_name: str | None = ball.cached_regime.name
-    if special_image := ball_instance.special_card:
-        card_name = getattr(ball_instance.specialcard, "name", card_name)
-        image = open_image(special_image)
-        if ball_instance.specialcard and ball_instance.specialcard.credits:
-            special_credits += f" • Special Author: {ball_instance.specialcard.credits}"
+    special = ball_instance.specialcard
+    special_name = special.name if special else ""
+    special_credits = f" • Special Author: {special.credits}" if special and special.credits else ""
+    overlay = ball_instance.special_overlay
+
+    # the credits color is read from the finished card and cached under this name, one per look
+    card_name: str | None
+    if background := ball_instance.special_background:
+        image = open_image(background)
+        card_name = special_name or ball.cached_regime.name
     else:
         image = open_image(ball.cached_regime.background)
+        # an overlay hides part of the background, the credits strip included, so the two layers together are
+        # the look the credits color is cached for
+        card_name = f"{ball.cached_regime.name} + {special_name}" if overlay else ball.cached_regime.name
     if full_art:
         with Image.open(full_art) as art:
             image = ImageOps.fit(art.convert("RGBA"), image.size)
         # the background of the special isn't shown, and every full art needs its own credits color
-        special_credits = ""
         card_name = None
+        if not overlay:
+            special_credits = ""
     icon = open_image(ball.cached_economy.icon) if ball.cached_economy else None
+
+    if not full_art:
+        # the collection card is a model file field, so it goes through open_image to release its
+        # descriptor; `artwork` is a plain path, which Pillow closes on its own
+        with Image.open(artwork) if artwork else open_image(ball.collection_card) as art:
+            image.paste(ImageOps.fit(art.convert("RGBA"), artwork_size), CORNERS[0])  # type: ignore
+    if overlay:
+        # the special's upper layer covers the background and the card art, but not what is written next
+        with open_image(overlay) as layer:
+            image.alpha_composite(ImageOps.fit(layer, image.size))
 
     draw = ImageDraw.Draw(image)
     draw.text((50, 20), ball.short_name or ball.country, font=title_font, stroke_width=2, stroke_fill=(0, 0, 0, 255))
@@ -168,12 +189,6 @@ def draw_card(
         stroke_width=0,
         stroke_fill=(255, 255, 255, 255),
     )
-
-    if not full_art:
-        # the collection card is a model file field, so it goes through open_image to release its
-        # descriptor; `artwork` is a plain path, which Pillow closes on its own
-        with Image.open(artwork) if artwork else open_image(ball.collection_card) as art:
-            image.paste(ImageOps.fit(art.convert("RGBA"), artwork_size), CORNERS[0])  # type: ignore
 
     if icon:
         icon = ImageOps.fit(icon, (192, 192))

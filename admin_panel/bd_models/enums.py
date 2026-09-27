@@ -28,3 +28,10 @@ class FriendPolicy(models.IntegerChoices):
 class TradeCooldownPolicy(models.IntegerChoices):
     COOLDOWN = 1
     BYPASS = 2
+
+
+class SpecialLayer(models.TextChoices):
+    """Where a special draws its own art on the cards of the treasures it marks."""
+
+    BACKGROUND = "background", "Background (behind the card art)"
+    FOREGROUND = "foreground", "Foreground (over the card art)"
