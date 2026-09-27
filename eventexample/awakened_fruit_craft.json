@@ -1,0 +1,706 @@
+{
+  "tier": {
+    "id": 5,
+    "name": "Awakened Fruit"
+  },
+  "card": {
+    "tradeable": true,
+    "no_special": false,
+    "enabled": true,
+    "price": null
+  },
+  "requirement": {
+    "delete_balls": true
+  },
+  "notes": "One craft per collector for the Awakened Fruit tier: the collector's own treasure, in the given amount. `treasure` is the card the recipe asks for, `collector` is the collector it is attached to (they differ for a few of them), `listed_as` keeps the name as it was written in the source list when it needed correcting, and `tier_1` is that collector's existing Tier 1 amount, for comparison only. `requirement.delete_balls` true means the copies are used up when the card is claimed, like the Elemental recipes; set it to false to keep them (the card is then watched and can be taken back).",
+  "recipes": [
+    {
+      "collector": "Akuma no Mi (Devil's Fruit)",
+      "treasure": "Akuma no Mi (Devil's Fruit)",
+      "amount": 15,
+      "tier_1": null
+    },
+    {
+      "collector": "Yami Yami (Dark Dark)",
+      "treasure": "Yami Yami no Mi (Dark Dark)",
+      "amount": 14,
+      "tier_1": 22
+    },
+    {
+      "collector": "Gomu Gomu (Gum Gum)",
+      "treasure": "Gomu Gomu no Mi (Gum Gum)",
+      "amount": 14,
+      "tier_1": 22
+    },
+    {
+      "collector": "Nidhogg",
+      "treasure": "Nidhöggr",
+      "amount": 13,
+      "tier_1": 20
+    },
+    {
+      "collector": "Gura Gura (Quake Quake)",
+      "treasure": "Gura Gura no Mi (Quake Quake)",
+      "amount": 13,
+      "tier_1": 19
+    },
+    {
+      "collector": "Ope Ope no Mi",
+      "treasure": "Ope Ope no Mi",
+      "amount": 12,
+      "tier_1": 18
+    },
+    {
+      "collector": "Seiryu (Azure Dragon)",
+      "treasure": "Seiryu (Azure Dragon)",
+      "amount": 12,
+      "tier_1": 18
+    },
+    {
+      "collector": "Magu Magu (Magma Magma)",
+      "treasure": "Magu Magu no Mi (Magma Magma)",
+      "amount": 12,
+      "tier_1": 18
+    },
+    {
+      "collector": "Hie Hie no Mi (Chilly Chilly)",
+      "treasure": "Hie Hie no Mi (Chilly Chilly)",
+      "amount": 11,
+      "tier_1": 16
+    },
+    {
+      "collector": "Pika Pika no Mi (Light Light)",
+      "treasure": "Pika Pika no Mi (Light Light)",
+      "amount": 11,
+      "tier_1": 16
+    },
+    {
+      "collector": "Jiki Jiki no Mi (Magnet Magnet)",
+      "treasure": "Jiki Jiki no Mi (Magnet Magnet)",
+      "amount": 10,
+      "tier_1": 17
+    },
+    {
+      "collector": "Ratatoskr",
+      "treasure": "Ratatoskr",
+      "amount": 10,
+      "tier_1": 17
+    },
+    {
+      "collector": "Tori Tori:Phoenix",
+      "treasure": "Tori Tori:Phoenix",
+      "amount": 10,
+      "tier_1": 17
+    },
+    {
+      "collector": "Nikyu Nikyu no Mi (Paw Paw)",
+      "treasure": "Nikyu Nikyu no Mi (Paw Paw)",
+      "amount": 10,
+      "tier_1": 17
+    },
+    {
+      "collector": "Goro Goro no Mi (Thunder Thunder)",
+      "treasure": "Goro Goro no Mi (Thunder Thunder)",
+      "amount": 10,
+      "tier_1": 16
+    },
+    {
+      "collector": "Soru Soru no Mi (Soul Soul)",
+      "treasure": "Soru Soru no Mi (Soul Soul)",
+      "amount": 10,
+      "tier_1": 16
+    },
+    {
+      "collector": "Mera Mera no Mi (Fire Fire)",
+      "treasure": "Mera Mera no Mi (Fire Fire)",
+      "amount": 10,
+      "tier_1": 16
+    },
+    {
+      "collector": "Hito Hito: Buddha",
+      "treasure": "Hito Hito: Buddha",
+      "amount": 10,
+      "listed_as": "Hito Hito:Buddha",
+      "tier_1": 16
+    },
+    {
+      "collector": "Suna no Mi (Sand Sand)",
+      "treasure": "Suna Suna no Mi (Sand Sand)",
+      "amount": 10,
+      "tier_1": 18
+    },
+    {
+      "collector": "Mori Mori no Mi (Forest Forest)",
+      "treasure": "Mori Mori no Mi (Forest Forest)",
+      "amount": 10,
+      "tier_1": 17
+    },
+    {
+      "collector": "Zushi Zushi no Mi (Press Press)",
+      "treasure": "Zushi Zushi no Mi (Press Press)",
+      "amount": 10,
+      "tier_1": 17
+    },
+    {
+      "collector": "Fengxi",
+      "treasure": "Fengxi",
+      "amount": 10,
+      "tier_1": 19
+    },
+    {
+      "collector": "Bakotsu",
+      "treasure": "Bakotsu",
+      "amount": 10,
+      "tier_1": 19
+    },
+    {
+      "collector": "Itsumade",
+      "treasure": "Itsumade",
+      "amount": 10,
+      "tier_1": 19
+    },
+    {
+      "collector": "Gyuki",
+      "treasure": "Gyuki",
+      "amount": 10,
+      "tier_1": 19
+    },
+    {
+      "collector": "Sandworm",
+      "treasure": "Sandworm",
+      "amount": 10,
+      "tier_1": 19
+    },
+    {
+      "collector": "Okuchi no Makami",
+      "treasure": "Okuchi no Makami",
+      "amount": 10,
+      "tier_1": 17
+    },
+    {
+      "collector": "Mochi Mochi no Mi",
+      "treasure": "Mochi Mochi no Mi",
+      "amount": 10,
+      "tier_1": 18
+    },
+    {
+      "collector": "Doku Doku no Mi (Venom Venom)",
+      "treasure": "Doku Doku no Mi (Venom Venom)",
+      "amount": 15,
+      "tier_1": 26
+    },
+    {
+      "collector": "Ito Ito no Mi (String String)",
+      "treasure": "Ito Ito no Mi (String String)",
+      "amount": 15,
+      "tier_1": 24
+    },
+    {
+      "collector": "Neko:Leopard",
+      "treasure": "Neko:Leopard",
+      "amount": 15,
+      "tier_1": 24
+    },
+    {
+      "collector": "Brachiosaurus",
+      "treasure": "Brachiosaurus",
+      "amount": 15,
+      "tier_1": 27
+    },
+    {
+      "collector": "Pteranodon",
+      "treasure": "Pteranodon",
+      "amount": 15,
+      "tier_1": 27
+    },
+    {
+      "collector": "Fuwa Fuwa no Mi (Float Float)",
+      "treasure": "Fuwa Fuwa no Mi (Float Float)",
+      "amount": 15,
+      "tier_1": 27
+    },
+    {
+      "collector": "Toshi Toshi no Mi (Age Age)",
+      "treasure": "Toshi Toshi no Mi (Age Age)",
+      "amount": 15,
+      "tier_1": 27
+    },
+    {
+      "collector": "Aro Aro no Mi (Arrow Arrow)",
+      "treasure": "Aro Aro no Mi (Arrow Arrow)",
+      "amount": 15,
+      "tier_1": 29
+    },
+    {
+      "collector": "Gasu Gasu no Mi (Gas Gas)",
+      "treasure": "Gasu Gasu no Mi (Gas Gas)",
+      "amount": 15,
+      "tier_1": 31
+    },
+    {
+      "collector": "Susu Susu no Mi (Soot Soot)",
+      "treasure": "Susu Susu no Mi (Soot Soot)",
+      "amount": 15,
+      "tier_1": 31
+    },
+    {
+      "collector": "Moku Moku no Mi (Smoke Smoke)",
+      "treasure": "Moku Moku no Mi (Smoke Smoke)",
+      "amount": 15,
+      "tier_1": 31
+    },
+    {
+      "collector": "Mero Mero no Mi (Love Love)",
+      "treasure": "Mero Mero no Mi (Love Love)",
+      "amount": 15,
+      "tier_1": 31
+    },
+    {
+      "collector": "Iba Iba no Mi (Thorn Thorn)",
+      "treasure": "Iba Iba no Mi (Thorn Thorn)",
+      "amount": 15,
+      "tier_1": 33
+    },
+    {
+      "collector": "Kirin",
+      "treasure": "Kirin",
+      "amount": 15,
+      "tier_1": 33
+    },
+    {
+      "collector": "Kyubi no Kitsune (Nine Tailed Fox)",
+      "treasure": "Kyubi no Kitsune (Nine Tailed Fox)",
+      "amount": 16,
+      "tier_1": 35
+    },
+    {
+      "collector": "Yuki Yuki no Mi (Snow Snow)",
+      "treasure": "Yuki Yuki no Mi (Snow Snow)",
+      "amount": 16,
+      "tier_1": 35
+    },
+    {
+      "collector": "Bara Bara no Mi (Chop Chop)",
+      "treasure": "Bara Bara no Mi (Chop Chop)",
+      "amount": 16,
+      "tier_1": 35
+    },
+    {
+      "collector": "Doru Doru no Mi (Wax Wax)",
+      "treasure": "Doru Doru no Mi (Wax Wax)",
+      "amount": 18,
+      "tier_1": 37
+    },
+    {
+      "collector": "Kage Kage no Mi (Shadow Shadow)",
+      "treasure": "Kage Kage no Mi (Shadow Shadow)",
+      "amount": 18,
+      "tier_1": 37
+    },
+    {
+      "collector": "Mammoth",
+      "treasure": "Mammoth",
+      "amount": 18,
+      "tier_1": 41
+    },
+    {
+      "collector": "Pachycephalosaurus (Ulti)",
+      "treasure": "Pachycephalosaurus",
+      "amount": 18,
+      "tier_1": 39
+    },
+    {
+      "collector": "Triceratops",
+      "treasure": "Triceratops",
+      "amount": 18,
+      "tier_1": 39
+    },
+    {
+      "collector": "Allosaurus",
+      "treasure": "Allosaurus",
+      "amount": 18,
+      "tier_1": 40
+    },
+    {
+      "collector": "Saber Tiger",
+      "treasure": "Saber Tiger",
+      "amount": 18,
+      "tier_1": 41
+    },
+    {
+      "collector": "Spinosaurus",
+      "treasure": "Spinosaurus",
+      "amount": 18,
+      "tier_1": 41
+    },
+    {
+      "collector": "Ushi Ushi no Mi (Giraffe)",
+      "treasure": "Ushi Ushi no Mi (Giraffe)",
+      "amount": 20,
+      "tier_1": 42
+    },
+    {
+      "collector": "Kira Kira no Mi (Diamond Diamond)",
+      "treasure": "Kira Kira no Mi (Diamond Diamond)",
+      "amount": 20,
+      "tier_1": 46
+    },
+    {
+      "collector": "Wapu Wapu no Mi (Warp Warp)",
+      "treasure": "Wapu Wapu no Mi (Warp Warp)",
+      "amount": 20,
+      "tier_1": 44
+    },
+    {
+      "collector": "Horo Horo no Mi",
+      "treasure": "Horo Horo no Mi",
+      "amount": 22,
+      "listed_as": "Horo Horo no Mi (Hollow Hollow)",
+      "tier_1": 45
+    },
+    {
+      "collector": "Batto Batto no Mi (Bat Bat)",
+      "treasure": "Batto Batto no Mi (Bat Bat)",
+      "amount": 22,
+      "tier_1": 44
+    },
+    {
+      "collector": "Hobi Hobi no Mi",
+      "treasure": "Hobi Hobi no Mi",
+      "amount": 22,
+      "tier_1": 43
+    },
+    {
+      "collector": "Horu Horu no Mi (Hormone Hormone)",
+      "treasure": "Horu Horu no Mi (Hormone Hormone)",
+      "amount": 22,
+      "tier_1": 43
+    },
+    {
+      "collector": "Shibo Shibo no Mi (Squeeze Squeeze)",
+      "treasure": "Shibo Shibo no Mi (Squeeze Squeeze)",
+      "amount": 22,
+      "tier_1": 43
+    },
+    {
+      "collector": "Cerberus",
+      "treasure": "Cerberus",
+      "amount": 23,
+      "tier_1": 46
+    },
+    {
+      "collector": "Hito Hito no Mi (Human Human)",
+      "treasure": "Hito Hito no Mi (Human Human)",
+      "amount": 23,
+      "tier_1": 39
+    },
+    {
+      "collector": "Hapi Hapi no Mi (Harpy)",
+      "treasure": "Hapi Hapi no Mi (Harpy)",
+      "amount": 23,
+      "listed_as": "Hapi Hapi no Mi (Harpy Harpy)",
+      "tier_1": 48
+    },
+    {
+      "collector": "Bari Bari no Mi (Barrier Barrier)",
+      "treasure": "Bari Bari no Mi (Barrier Barrier)",
+      "amount": 23,
+      "tier_1": 48
+    },
+    {
+      "collector": "Uta Uta no Mi (Sing Sing)",
+      "treasure": "Uta Uta no Mi (Sing Sing)",
+      "amount": 25,
+      "tier_1": 41
+    },
+    {
+      "collector": "Yamata Orochi",
+      "treasure": "Yamata Orochi",
+      "amount": 25,
+      "tier_1": 47
+    },
+    {
+      "collector": "Falcon",
+      "treasure": "Falcon",
+      "amount": 25,
+      "tier_1": 49
+    },
+    {
+      "collector": "Shima Shima no Mi (Island Island)",
+      "treasure": "Shima Shima no Mi (Island Island)",
+      "amount": 26,
+      "tier_1": 51
+    },
+    {
+      "collector": "Ishi Ishi no Mi (Stone Stone)",
+      "treasure": "Ishi Ishi no Mi (Stone Stone)",
+      "amount": 26,
+      "tier_1": 49
+    },
+    {
+      "collector": "Hana Hana no Mi (Flower Flower)",
+      "treasure": "Hana Hana no Mi (Flower Flower)",
+      "amount": 26,
+      "tier_1": 49
+    },
+    {
+      "collector": "Wara Wara no Mi (Straw Straw)",
+      "treasure": "Wara Wara no Mi (Straw Straw)",
+      "amount": 27,
+      "tier_1": 49
+    },
+    {
+      "collector": "Pero Pero no Mi (Lick Lick)",
+      "treasure": "Pero Pero no Mi (Lick Lick)",
+      "amount": 27,
+      "tier_1": 51
+    },
+    {
+      "collector": "Bisu Bisu no Mi (Biscuit Biscuit)",
+      "treasure": "Bisu Bisu no Mi (Biscuit Biscuit)",
+      "amount": 27,
+      "tier_1": 44
+    },
+    {
+      "collector": "Netsu Netsu no Mi (Heat Heat)",
+      "treasure": "Netsu Netsu no Mi (Heat Heat)",
+      "amount": 28,
+      "tier_1": 51
+    },
+    {
+      "collector": "Gunyo Gunyo no Mi (Clay Clay)",
+      "treasure": "Gunyo Gunyo no Mi (Clay Clay)",
+      "amount": 28,
+      "tier_1": 51
+    },
+    {
+      "collector": "Numa Numa no Mi (Swamp Swamp)",
+      "treasure": "Numa Numa no Mi (Swamp Swamp)",
+      "amount": 28,
+      "tier_1": 48
+    },
+    {
+      "collector": "Oto Oto no Mi (Tone Tone)",
+      "treasure": "Oto Oto no Mi (Tone Tone)",
+      "amount": 29,
+      "tier_1": 49
+    },
+    {
+      "collector": "Riki Riki no Mi (Strong Strong)",
+      "treasure": "Riki Riki no Mi (Strong Strong)",
+      "amount": 29,
+      "tier_1": 44
+    },
+    {
+      "collector": "Kyo Kyo no Mi (Buff Buff)",
+      "treasure": "Kyo Kyo no Mi (Buff Buff)",
+      "amount": 29,
+      "tier_1": 51
+    },
+    {
+      "collector": "Shiro Shiro no Mi (Castle Castle)",
+      "treasure": "Shiro Shiro no Mi (Castle Castle)",
+      "amount": 29,
+      "tier_1": 52
+    },
+    {
+      "collector": "King Cobra",
+      "treasure": "King Cobra",
+      "amount": 30,
+      "tier_1": 49
+    },
+    {
+      "collector": "Hebi:Anaconda",
+      "treasure": "Hebi:Anaconda",
+      "amount": 30,
+      "listed_as": "Anaconda",
+      "tier_1": 51
+    },
+    {
+      "collector": "Inu:Wolf",
+      "treasure": "Inu:Wolf",
+      "amount": 30,
+      "tier_1": 48
+    },
+    {
+      "collector": "Suke Suke no Mi (Clear Clear)",
+      "treasure": "Suke Suke no Mi (Clear Clear)",
+      "amount": 30,
+      "tier_1": 49
+    },
+    {
+      "collector": "Inu:Dalmatian",
+      "treasure": "Inu:Dalmatian",
+      "amount": 32,
+      "tier_1": 51
+    },
+    {
+      "collector": "Inu:Hound",
+      "treasure": "Inu:Hound",
+      "amount": 32,
+      "tier_1": 52
+    },
+    {
+      "collector": "Dachshund",
+      "treasure": "Dachshund",
+      "amount": 32,
+      "tier_1": 49
+    },
+    {
+      "collector": "Toki Toki no Mi (Time Time)",
+      "treasure": "Toki Toki no Mi (Time Time)",
+      "amount": 34,
+      "tier_1": 48
+    },
+    {
+      "collector": "Nomi Nomi no Mi (Brain Brain)",
+      "treasure": "Nomi Nomi no Mi (Brain Brain)",
+      "amount": 34,
+      "tier_1": 51
+    },
+    {
+      "collector": "Noro Noro no Mi (Slow Slow)",
+      "treasure": "Noro Noro no Mi (Slow Slow)",
+      "amount": 34,
+      "tier_1": 55
+    },
+    {
+      "collector": "Sui Sui no Mi (Swim Swim)",
+      "treasure": "Sui Sui no Mi (Swim Swim)",
+      "amount": 34,
+      "tier_1": 50
+    },
+    {
+      "collector": "Ton Ton no Mi (Ton Ton)",
+      "treasure": "Ton Ton no Mi (Ton Ton)",
+      "amount": 34,
+      "tier_1": 51
+    },
+    {
+      "collector": "Baku Baku no Mi (Munch Munch)",
+      "treasure": "Baku Baku no Mi (Munch Munch)",
+      "amount": 36,
+      "tier_1": 51
+    },
+    {
+      "collector": "Woshu Woshu no Mi (Wash Wash)",
+      "treasure": "Woshu Woshu no Mi (Wash Wash)",
+      "amount": 36,
+      "tier_1": 53
+    },
+    {
+      "collector": "Mane Mane no Mi (Clone Clone)",
+      "treasure": "Mane Mane no Mi (Clone Clone)",
+      "amount": 38,
+      "tier_1": 65
+    },
+    {
+      "collector": "Bane Bane no Mi (Spring Spring)",
+      "treasure": "Bane Bane no Mi (Spring Spring)",
+      "amount": 39,
+      "tier_1": 54
+    },
+    {
+      "collector": "Fude Fude no Mi (Brush Brush)",
+      "treasure": "Fude Fude no Mi (Brush Brush)",
+      "amount": 40,
+      "tier_1": 54
+    },
+    {
+      "collector": "Ato Ato no Mi (Art Art)",
+      "treasure": "Ato Ato no Mi (Art Art)",
+      "amount": 40,
+      "tier_1": 51
+    },
+    {
+      "collector": "Yomi Yomi no Mi (Revive Revive)",
+      "treasure": "Yomi Yomi no Mi (Revive Revive)",
+      "amount": 40,
+      "tier_1": 51
+    },
+    {
+      "collector": "Juku Juku no Mi (Ripe Ripe)",
+      "treasure": "Juku Juku no Mi (Ripe Ripe)",
+      "amount": 40,
+      "tier_1": 54
+    },
+    {
+      "collector": "Onyudo",
+      "treasure": "Onyudo",
+      "amount": 41,
+      "tier_1": 54
+    },
+    {
+      "collector": "Tori:Albatross",
+      "treasure": "Tori:Albatross",
+      "amount": 42,
+      "tier_1": 53
+    },
+    {
+      "collector": "Nui Nui no Mi (Stitch Stitch)",
+      "treasure": "Nui Nui no Mi (Stitch Stitch)",
+      "amount": 42,
+      "tier_1": 54
+    },
+    {
+      "collector": "Toge Toge no Mi (Spike Spike)",
+      "treasure": "Toge Toge no Mi (Spike Spike)",
+      "amount": 42,
+      "tier_1": 52
+    },
+    {
+      "collector": "Buku Buku no Mi (Book Book)",
+      "treasure": "Buku Buku no Mi (Book Book)",
+      "amount": 43,
+      "tier_1": 54
+    },
+    {
+      "collector": "Bomu Bomu no Mi (Bomb Bomb)",
+      "treasure": "Bomu Bomu no Mi (Bomb Bomb)",
+      "amount": 43,
+      "tier_1": 54
+    },
+    {
+      "collector": "Pamu Pamu no Mi (Pop Pop)",
+      "treasure": "Pamu Pamu no Mi (Pop Pop)",
+      "amount": 43,
+      "tier_1": 53
+    },
+    {
+      "collector": "Beri Beri no Mi",
+      "treasure": "Beri Beri no Mi",
+      "amount": 45,
+      "tier_1": 55
+    },
+    {
+      "collector": "Ancient Spider (Rosamygale Grauvogeli)",
+      "treasure": "Rosamygale Grauvogeli (Ancient Spider)",
+      "amount": 45,
+      "tier_1": 54
+    },
+    {
+      "collector": "Buki Buki no Mi (Arms Arms)",
+      "treasure": "Buki Buki no Mi (Arms Arms)",
+      "amount": 45,
+      "tier_1": 54
+    },
+    {
+      "collector": "Kobu Kobu no Mi (Pump Pump)",
+      "treasure": "Kobu Kobu no Mi (Pump Pump)",
+      "amount": 45,
+      "tier_1": 54
+    },
+    {
+      "collector": "Supa Supa no Mi (Dice Dice)",
+      "treasure": "Supa Supa no Mi (Dice Dice)",
+      "amount": 45,
+      "tier_1": 54
+    },
+    {
+      "collector": "Mira Mira no Mi (Mirror Mirror)",
+      "treasure": "Mira Mira no Mi (Mirror Mirror)",
+      "amount": 45,
+      "tier_1": 54
+    }
+  ]
+}

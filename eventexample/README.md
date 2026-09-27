@@ -4,8 +4,11 @@ Each JSON file here describes a whole event pass (its tiers, quests and rewards)
 `load_event_pass` command builds in one go, instead of clicking it together in the admin.
 
 - `birthday_voyage.json`: the first anniversary event, October 9 to 18, 2026.
-- `halloween_2026.json`: one tier of five Thriller Bark quests, October 25 to November 1, 2026. The
-  Halloween 2026 special has a rarity of 0: raise it for the event, or "Haunted Ship" can't be done.
+- `halloween_2026.json`: four weekly Thriller Bark tiers, October 1 to 31, 2026. The Halloween 2026
+  special has a rarity of 0: raise it for the event, or no "catch a Halloween treasure" quest can be
+  finished.
+- `awakened_fruit_craft.json` + `.sql`: not a pass, the Awakened Fruit recipes of the collectors,
+  see the last section.
 
 ## Loading an event
 
@@ -170,3 +173,31 @@ an admin spawn. Create one in the Frames admin by ticking "No date" and giving i
 
 From Discord, `/frames active` lists what is running today, `/frames named` the dateless ones, and
 `/frames of <treasure>` everything one treasure has.
+
+## Collector crafts
+
+`awakened_fruit_craft.json` is a different kind of dump: the **Awakened Fruit** recipes of 114
+collectors, one line each, so they can be reviewed before anything is written. Every recipe asks for
+copies of the collector's own treasure:
+
+```json
+{ "collector": "Yami Yami (Dark Dark)", "treasure": "Yami Yami no Mi (Dark Dark)", "amount": 14, "tier_1": 22 }
+```
+
+`collector` is the collector the tier is attached to and `treasure` the card the recipe asks for —
+they are spelled differently for a few of them, so both are written down. `listed_as` appears when
+the source list wrote a name that needed correcting, and `tier_1` is that collector's existing
+Tier 1 amount, kept for comparison only. The header holds the settings shared by all of them: the
+tier (`id` 5, `Awakened Fruit`), whether the claimed card is tradeable, and whether the copies are
+**used up** when claiming (`requirement.delete_balls`).
+
+Collectors have no loader command, so the dump ships with the SQL that applies it. It skips any
+collector that already has the tier, so it can be run twice, and it refuses to write anything if one
+of the names doesn't exist:
+
+```bash
+docker compose exec -T postgres-db psql -U ballsdex -d ballsdex -v ON_ERROR_STOP=1 < eventexample/awakened_fruit_craft.sql
+```
+
+Changing an amount means editing both files, or regenerating the SQL from the JSON. After loading,
+`b.reloadcache` (or a restart) refreshes the bot's copy of the collectors.
