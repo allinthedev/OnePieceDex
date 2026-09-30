@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from ballsdex.core.utils import checks
 from ballsdex.core.utils.transformers import BallEnabledTransform
+from bd_models.models import frames_skipped
 
 from ..utils import (
     NO_SPECIAL,
@@ -46,6 +47,11 @@ def pick_spawn_frame(view: BallSpawnView) -> dict | None:
     """
     The frame shown by a spawn. The treasure caught from it gets the same frame, see `frame_of_new_treasure`.
     """
+    forced = getattr(view, "forced_frame", None)
+    if forced:
+        # an admin naming a frame on the spawn command: no roll, no date to match
+        view.picked_frame = forced  # type: ignore[attr-defined]
+        return forced
     if view.ballinstance is not None:
         # a dropped treasure keeps its own frame
         return view.ballinstance.extra_data if view.ballinstance.framed else None
@@ -133,12 +139,13 @@ class FramesCog(commands.Cog):
         from settings.models import PromptMessage, settings
 
         # ── BallInstance.save ──────────────────────────────────────────────────
-        # every new treasure goes through it: catches, packs, claims, gifts from admins...
+        # every new treasure goes through it: catches, packs, claims, gifts from admins... except the ones a
+        # reward or a craft marked with `mark_no_frame`, which stay plain whatever is running today
 
         original_ball_instance_save = BallInstance.save
 
         def patched_ball_instance_save(self, *args, **kwargs):
-            if not self.pk and not self.extra_data:
+            if not self.pk and not self.extra_data and not frames_skipped(self):
                 try:
                     frame = frame_of_new_treasure(self)
                     if frame is not None:

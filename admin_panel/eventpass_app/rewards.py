@@ -20,7 +20,7 @@ from currency_app.models import BerryTransaction
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from bd_models.models import Ball, BallInstance, balls, frame_entry, groups
+from bd_models.models import Ball, BallInstance, balls, frame_entry, groups, mark_no_frame, wants_no_frame
 from settings.models import settings
 from settings.utils import format_currency
 
@@ -83,6 +83,8 @@ def pool_balls(line: RewardLine) -> list[Ball]:
 
 
 def _frame_for(ball: Ball, frame_key: str) -> dict | None:
+    if wants_no_frame(frame_key):
+        return None
     frame = frame_entry(ball, frame_key)
     if frame_key and frame is None:
         log.warning("The frame %s of %s does not exist, the reward is given without it", frame_key, ball.country)
@@ -99,6 +101,7 @@ def _give_treasure(
     ball = ball or balls.get(line.ball_id) or line.ball
     if ball is None:
         return []
+    no_frame = wants_no_frame(line.frame_key)
     frame = _frame_for(ball, line.frame_key)
     created = []
     for _ in range(max(line.quantity, 1)):
@@ -122,6 +125,9 @@ def _give_treasure(
         # read by the game event bus, to congratulate the player where they claimed instead of where they played
         if channel_id:
             instance._notify_channel_id = channel_id  # type: ignore[attr-defined]
+        if no_frame:
+            # without this, the frames package would give it the frame running today, like it does for a catch
+            mark_no_frame(instance)
         instance.save()
         created.append(instance)
     return created

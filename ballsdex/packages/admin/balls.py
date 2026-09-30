@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import re
+from datetime import date
 from typing import TYPE_CHECKING, cast
 
 import discord
@@ -18,7 +19,17 @@ from django.urls import reverse
 from ballsdex.core.bot import BallsDexBot
 from ballsdex.core.utils import checks
 from ballsdex.core.utils.buttons import ConfirmChoiceView
-from bd_models.models import Ball, BallInstance, Player, Special, Trade, TradeObject, special_filter
+from bd_models.models import (
+    FRAME_SPECIAL_NAME,
+    Ball,
+    BallInstance,
+    Player,
+    Special,
+    Trade,
+    TradeObject,
+    frame_entry,
+    special_filter,
+)
 from settings.models import settings
 from settings.utils import format_currency
 
@@ -32,6 +43,88 @@ log = logging.getLogger("ballsdex.packages.admin.balls")
 FILENAME_RE = re.compile(r"^(.+)(\.\S+)$")
 
 
+def _is_frame_special(special: Special | None) -> bool:
+    """
+    The "Frame" special picks out the framed treasures in the commands, it is never given to one: an admin
+    choosing it is asking for a framed spawn, not for a treasure of that special.
+    """
+    return special is not None and special.name.casefold() == FRAME_SPECIAL_NAME.casefold()
+
+
+def _frame_choices(ball: Ball, special_id: int | None) -> list[str]:
+    """
+    What can be typed in `frame_name` for this treasure: the frames of every treasure and the ones of the special
+    that was picked, as their name, or as their key when they have none. A frame set up over two months has the
+    same name every day, so it is listed once.
+    """
+    from frames.utils import NO_SPECIAL, is_frame_entry, is_named_key, parse_frame_key
+
+    wanted = {None, NO_SPECIAL if special_id is None else special_id}
+    choices: set[str] = set()
+    for key, entry in ball.capacity_logic.items():
+        if not is_frame_entry(entry):
+            continue
+        parsed = parse_frame_key(key)
+        if parsed is None and not is_named_key(key):
+            continue
+        if parsed is not None and parsed[1] not in wanted:
+            continue
+        choices.add(str(entry.get("name") or "") or key)
+    return sorted(choices)
+
+
+def _frame_of_the_day(ball: Ball, special_id: int | None) -> dict | None:
+    """
+    The frame running today for this treasure: the one of the picked special first, then the one of every
+    treasure. The chance is ignored, an admin asking for a frame always gets it.
+    """
+    from frames.utils import NO_SPECIAL, frame_key, is_frame_entry
+
+    today = date.today()
+    for key in (frame_key(today, NO_SPECIAL if special_id is None else special_id), frame_key(today)):
+        entry = ball.capacity_logic.get(key)
+        if is_frame_entry(entry):
+            return entry
+    return None
+
+
+async def _spawn_frame(ctx: commands.Context[BallsDexBot], flags: SpawnFlags) -> tuple[bool, dict | None]:
+    """
+    The frame a forced spawn carries, if any. Returns (go ahead, frame): the admin was already told what is
+    wrong when the first item is False.
+    """
+    if flags.frame_name is None and not _is_frame_special(flags.special):
+        return True, None
+    if flags.countryball is None:
+        await ctx.send(
+            "A frame belongs to one treasure: name the `countryball` you want to spawn framed.", ephemeral=True
+        )
+        return False, None
+    try:
+        import frames.utils  # noqa: F401
+    except ImportError:
+        await ctx.send("The `frames` package is not loaded, frames cannot be spawned.", ephemeral=True)
+        return False, None
+
+    ball = flags.countryball
+    special_id = None if _is_frame_special(flags.special) else (flags.special.pk if flags.special else None)
+    frame = frame_entry(ball, flags.frame_name) if flags.frame_name else _frame_of_the_day(ball, special_id)
+    if frame is not None:
+        return True, frame
+
+    choices = _frame_choices(ball, special_id)
+    which = f"`{flags.frame_name}`" if flags.frame_name else "running today"
+    if not choices:
+        await ctx.send(
+            f"No frame {which} for {ball.country}, and it has no frame at all for these settings.", ephemeral=True
+        )
+        return False, None
+    listed = "\n".join(f"- {choice}" for choice in choices[:25])
+    more = f"\n…and {len(choices) - 25} more." if len(choices) > 25 else ""
+    await ctx.send(f"No frame {which} for {ball.country}. Available here:\n{listed}{more}", ephemeral=True)
+    return False, None
+
+
 async def _spawn_bomb(
     ctx: commands.Context[BallsDexBot],
     countryball_cls: type["BallSpawnView"],
@@ -41,6 +134,7 @@ async def _spawn_bomb(
     special: Special | None = None,
     atk_bonus: int | None = None,
     hp_bonus: int | None = None,
+    frame: dict | None = None,
 ):
     spawned = 0
     message: discord.Message
@@ -68,6 +162,9 @@ async def _spawn_bomb(
             ball.special = special
             ball.atk_bonus = atk_bonus
             ball.hp_bonus = hp_bonus
+            if frame is not None:
+                # read by the frames package when the spawn draws itself, and kept by the treasure caught from it
+                ball.forced_frame = frame
             result = await ball.spawn(channel)
             if not result:
                 task.cancel()
@@ -113,9 +210,17 @@ async def spawn(ctx: commands.Context[BallsDexBot], *, flags: SpawnFlags):
         )
         return
 
+    go_ahead, frame = await _spawn_frame(ctx, flags)
+    if not go_ahead:
+        return
+    # the "Frame" special only means "spawn it framed", giving it to a treasure is what used to break the card
+    special = None if _is_frame_special(flags.special) else flags.special
+
     special_attrs = []
-    if flags.special is not None:
-        special_attrs.append(f"special={flags.special.name}")
+    if special is not None:
+        special_attrs.append(f"special={special.name}")
+    if frame is not None:
+        special_attrs.append(f"frame={frame.get('name') or flags.frame_name or 'of the day'}")
     if flags.atk_bonus is not None:
         special_attrs.append(f"atk={flags.atk_bonus}")
     if flags.hp_bonus is not None:
@@ -127,9 +232,10 @@ async def spawn(ctx: commands.Context[BallsDexBot], *, flags: SpawnFlags):
             flags.countryball,
             flags.channel or ctx.channel,  # type: ignore
             flags.n,
-            flags.special,
+            special,
             flags.atk_bonus,
             flags.hp_bonus,
+            frame,
         )
         log.info(
             f"{ctx.author} spawned {settings.collectible_name}"
@@ -144,9 +250,12 @@ async def spawn(ctx: commands.Context[BallsDexBot], *, flags: SpawnFlags):
         ball = await cog.countryball_cls.get_random(ctx.bot)
     else:
         ball = cog.countryball_cls(ctx.bot, flags.countryball)
-    ball.special = flags.special
+    ball.special = special
     ball.atk_bonus = flags.atk_bonus
     ball.hp_bonus = flags.hp_bonus
+    if frame is not None:
+        # read by the frames package when the spawn draws itself, and kept by the treasure caught from it
+        ball.forced_frame = frame
     result = await ball.spawn(flags.channel or ctx.channel)  # type: ignore
 
     if result:

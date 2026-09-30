@@ -146,8 +146,9 @@ class CollectorTier(models.Model):
         max_length=32,
         blank=True,
         default="",
-        help_text='Frame given to the claimed card, as its key in the Frames section ("09-20-2026", or '
-        '"09-20-2026:3" for a frame of one special). Leave empty for a normal card.',
+        help_text='Frame given to the claimed card, as its name or its key in the Frames section ("09-20-2026", '
+        'or "09-20-2026:3" for a frame of one special). Leave empty to give whatever frame runs on the day the '
+        'card is claimed, like a catch, and write "none" for a card that always stays plain.',
     )
     enabled = models.BooleanField(default=True, help_text="Uncheck to disable this tier for this collector only.")
     price = models.PositiveBigIntegerField(

@@ -18,9 +18,15 @@
   {% if frames %}
   <div class="module">
     <h2>{% blocktrans with name=ball.country %}Existing frames for {{ name }}{% endblocktrans %}</h2>
+    <form method="post" action="{% url 'admin:frames_frameball_delete_frames' ball.pk %}"
+          onsubmit="return confirm('Remove the ticked frames from {{ ball.country|escapejs }}?')">
+      {% csrf_token %}
     <table style="width:100%; border-collapse:collapse">
       <thead>
         <tr>
+          <th style="padding:6px 8px; text-align:left; width:2em">
+            <input type="checkbox" id="frames-toggle-all" title="{% trans 'Tick every frame' %}" />
+          </th>
           <th style="padding:6px 8px; text-align:left">{% trans "Date (MM-DD-YYYY)" %}</th>
           <th style="padding:6px 8px; text-align:left">{% trans "Special" %}</th>
           <th style="padding:6px 8px; text-align:left">{% trans "Card art" %}</th>
@@ -35,6 +41,10 @@
       <tbody>
         {% for frame in frames %}
         <tr style="border-top:1px solid #eee">
+          <td style="padding:6px 8px">
+            <input type="checkbox" name="frame" value="{{ frame.key }}" class="frames-tick"
+                   aria-label="{{ frame.label }}" />
+          </td>
           <td style="padding:6px 8px"><strong>{{ frame.date }}</strong></td>
           <td style="padding:6px 8px">{{ frame.special|default:_("Every treasure") }}</td>
           <td style="padding:6px 8px">
@@ -64,7 +74,26 @@
         {% endfor %}
       </tbody>
     </table>
+      <div class="submit-row" style="text-align:left">
+        <input type="submit" value="{% trans 'Delete the ticked frames' %}" class="deletelink"
+               style="border:none; cursor:pointer" />
+        <span class="help" style="margin-left:12px">
+          {% trans "A frame set up over several weeks is one line a day: tick the box in the header to take them all off at once." %}
+        </span>
+      </div>
+    </form>
   </div>
+  <script>
+    (() => {
+      const all = document.getElementById("frames-toggle-all");
+      const ticks = [...document.querySelectorAll(".frames-tick")];
+      if (!all) return;
+      all.addEventListener("change", () => ticks.forEach((tick) => { tick.checked = all.checked; }));
+      ticks.forEach((tick) => tick.addEventListener("change", () => {
+        all.checked = ticks.every((other) => other.checked);
+      }));
+    })();
+  </script>
   {% else %}
   <div class="module" style="padding:12px 16px">
     <p>{% blocktrans with name=ball.country %}No frames yet for <strong>{{ name }}</strong>.{% endblocktrans %}</p>

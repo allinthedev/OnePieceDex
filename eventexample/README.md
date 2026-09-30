@@ -164,9 +164,24 @@ side — players reach the other one by naming it, `/pass view event_pass:...`.
 
 ### Frames as rewards
 
-A reward line's `frame_key` names the frame the treasure is given with. A frame can be pointed at **by its name**
+A reward's `frame_key` names the frame its treasures are given with. A frame can be pointed at **by its name**
 ("Haki Aura", case and spaces do not matter) or by the key it is stored under ("09-20-2026", "09-20-2026:3" for
 the frame of one special). Naming it is the easy way: the name does not change when the event moves.
+
+```json
+"reward": { "cards": ["Perona"], "frame_key": "Haki Aura" }
+```
+
+The key applies to every treasure of that reward, the ones drawn from a pool included, and a name that no
+treasure carries is reported by `--dry-run` instead of quietly giving a plain card.
+
+**Leaving `frame_key` out is not the same as asking for a plain card.** Any new treasure with no frame on it
+rolls the frame running that day, exactly like a catch does — a reward claimed while a frame covers the treasure
+comes out framed. Write `"frame_key": "none"` for a card that must stay plain whatever is running:
+
+```json
+"reward": { "cards": ["Perona"], "frame_key": "none" }
+```
 
 A frame with **no date** never drops on a catch — it only exists to be given on purpose, as a pass reward or with
 an admin spawn. Create one in the Frames admin by ticking "No date" and giving it a name.

@@ -409,6 +409,35 @@ FRAME_SPECIAL_NAME = "Frame"
 FRAMED = Q(extra_data__has_key="card")
 # a frame entry in Ball.capacity_logic holds at least one of these, see the frames package
 FRAME_FIELDS = frozenset({"card", "spawn", "credits", "catch"})
+# the frame_key asking for a plain card, see `wants_no_frame`
+NO_FRAME_KEY = "none"
+# set on an unsaved BallInstance to keep it out of today's frame, see `mark_no_frame`
+NO_FRAME_ATTRIBUTE = "_no_frame"
+
+
+def wants_no_frame(key: str) -> bool:
+    """
+    Whether this `frame_key` asks for a card with no frame at all.
+
+    An empty `frame_key` only means "don't give a frame on purpose": the treasure is still created without one, and
+    the frames package then rolls the frame running today for it, like it does for a catch. "none" is how a reward
+    or a craft says the card must stay plain whatever is running that day.
+    """
+    return bool(key) and key.strip().lower() == NO_FRAME_KEY
+
+
+def mark_no_frame(instance: "BallInstance") -> None:
+    """
+    Keep this new treasure out of the frame running today. Set it before saving, the frames package reads it.
+    """
+    setattr(instance, NO_FRAME_ATTRIBUTE, True)
+
+
+def frames_skipped(instance: "BallInstance") -> bool:
+    """
+    Whether this treasure was marked to stay plain, whatever frame is running today.
+    """
+    return bool(getattr(instance, NO_FRAME_ATTRIBUTE, False))
 
 
 def frame_entry(ball: "Ball", key: str) -> dict | None:

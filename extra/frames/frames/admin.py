@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db.models.expressions import RawSQL
@@ -389,7 +390,12 @@ class FrameAdmin(admin.ModelAdmin):
                 "<int:ball_pk>/delete_date/<str:date_key>/",
                 self.admin_site.admin_view(self.delete_date_view),
                 name="frames_frameball_delete_date",
-            )
+            ),
+            urlpath(
+                "<int:ball_pk>/delete_frames/",
+                self.admin_site.admin_view(self.delete_frames_view),
+                name="frames_frameball_delete_frames",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -550,12 +556,11 @@ class FrameAdmin(admin.ModelAdmin):
 
     def delete_date_view(self, request: HttpRequest, ball_pk: int, date_key: str) -> HttpResponse:
         if not self.has_change_permission(request):
-            from django.core.exceptions import PermissionDenied
-
             raise PermissionDenied
 
-        if parse_frame_key(date_key) is None:
-            self.message_user(request, f"Invalid date key: {date_key!r}.", level=messages.ERROR)
+        # a named frame has no date, it is deleted the same way
+        if parse_frame_key(date_key) is None and not is_named_key(date_key):
+            self.message_user(request, f"Invalid frame key: {date_key!r}.", level=messages.ERROR)
             return redirect(reverse("admin:frames_frameball_changelist"))
 
         ball = get_object_or_404(Ball, pk=ball_pk)
@@ -571,3 +576,32 @@ class FrameAdmin(admin.ModelAdmin):
             self.message_user(request, f"Removed frame {label} from {ball.country}.")
 
         return redirect(reverse("admin:frames_frameball_change", args=[ball_pk]))
+
+    def delete_frames_view(self, request: HttpRequest, ball_pk: int) -> HttpResponse:
+        """
+        Remove every ticked frame at once. A frame set up for two months is one entry a day, and taking them off
+        one by one is an afternoon of clicking.
+        """
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        ball = get_object_or_404(Ball, pk=ball_pk)
+        back = redirect(reverse("admin:frames_frameball_change", args=[ball_pk]))
+        if request.method != "POST":
+            return back
+
+        labels = {frame["key"]: frame["label"] for frame in _frames_of(ball)}
+        # only the keys holding a frame of this treasure, so nothing else in capacity_logic can be posted away
+        removed = [key for key in dict.fromkeys(request.POST.getlist("frame")) if key in labels]
+        if not removed:
+            self.message_user(request, "No frame was ticked.", level=messages.WARNING)
+            return back
+
+        gone = set(removed)
+        ball.capacity_logic = {key: value for key, value in ball.capacity_logic.items() if key not in gone}
+        ball.save(update_fields=["capacity_logic"])
+        if len(removed) == 1:
+            self.message_user(request, f"Removed frame {labels[removed[0]]} from {ball.country}.")
+        else:
+            self.message_user(request, f"Removed {len(removed)} frames from {ball.country}.")
+        return back
