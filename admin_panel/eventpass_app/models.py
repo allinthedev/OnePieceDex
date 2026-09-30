@@ -251,7 +251,8 @@ class RewardLine(models.Model):
         default="",
         help_text='Frame given to the treasure: its name ("Haki Aura") or the key it is stored under '
         '("09-20-2026", or "09-20-2026:3" for a frame of one special). A name is easier to read and does not '
-        "change when the event moves. Leave empty for a normal card.",
+        'change when the event moves. Leave empty to give whatever frame runs on the day the reward is claimed, '
+        'like a catch, and write "none" for a card that always stays plain.',
     )
     bonus_mode = models.CharField(
         max_length=8,

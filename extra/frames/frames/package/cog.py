@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from ballsdex.core.utils import checks
 from ballsdex.core.utils.transformers import BallEnabledTransform
+from bd_models.models import frames_skipped
 
 from ..utils import (
     NO_SPECIAL,
@@ -133,12 +134,13 @@ class FramesCog(commands.Cog):
         from settings.models import PromptMessage, settings
 
         # ── BallInstance.save ──────────────────────────────────────────────────
-        # every new treasure goes through it: catches, packs, claims, gifts from admins...
+        # every new treasure goes through it: catches, packs, claims, gifts from admins... except the ones a
+        # reward or a craft marked with `mark_no_frame`, which stay plain whatever is running today
 
         original_ball_instance_save = BallInstance.save
 
         def patched_ball_instance_save(self, *args, **kwargs):
-            if not self.pk and not self.extra_data:
+            if not self.pk and not self.extra_data and not frames_skipped(self):
                 try:
                     frame = frame_of_new_treasure(self)
                     if frame is not None:

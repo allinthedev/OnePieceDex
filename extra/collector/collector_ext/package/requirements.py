@@ -15,7 +15,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from ballsdex.core.game_events import Event, EventContext, bus
-from bd_models.models import BallInstance, Player, balls, frame_entry
+from bd_models.models import BallInstance, Player, balls, frame_entry, mark_no_frame, wants_no_frame
 from bd_models.signals import notify_ownership_change
 from settings.models import settings
 
@@ -206,8 +206,10 @@ def claim_tier(player_id: int, tier_id: int, server_id: int | None) -> ClaimResu
             notify_ownership_change(lost={player_id: consumed})
 
         # a tier can give its card another illustration, like the anniversary craft turning tokens into a frame
-        frame = frame_entry(balls.get(tier.collector.ball_id) or tier.collector.ball, tier.frame_key)
-        card = BallInstance.objects.create(
+        no_frame = wants_no_frame(tier.frame_key)
+        treasure = balls.get(tier.collector.ball_id) or tier.collector.ball
+        frame = None if no_frame else frame_entry(treasure, tier.frame_key)
+        card = BallInstance(
             player_id=player_id,
             ball_id=tier.collector.ball_id,
             special_id=tier.card_special_id,
@@ -218,6 +220,10 @@ def claim_tier(player_id: int, tier_id: int, server_id: int | None) -> ClaimResu
             server_id=server_id,
             extra_data=dict(frame) if frame else {},
         )
+        if no_frame:
+            # without this, the frames package would give it the frame running today, like it does for a catch
+            mark_no_frame(card)
+        card.save(force_insert=True)
         CollectorInstance.objects.create(
             player_id=player_id,
             collector_id=tier.collector_id,

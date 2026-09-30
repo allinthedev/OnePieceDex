@@ -20,7 +20,7 @@ from django.utils.dateparse import parse_datetime
 from merchant_app.models import MerchantItem
 
 from ballsdex.core.game_events import normalize_command
-from bd_models.models import Ball, BallGroup, Economy, Regime, Special
+from bd_models.models import Ball, BallGroup, Economy, Regime, Special, frame_entry, wants_no_frame
 
 from .models import (
     AccessKind,
@@ -101,7 +101,7 @@ QUEST_KEYS = {
     "notes",
     "reward",
 }
-REWARD_KEYS = {"cards", "tokens", "berries", "mode", "pick", "offer", "pool"}
+REWARD_KEYS = {"cards", "tokens", "berries", "mode", "pick", "offer", "pool", "frame_key"}
 POOL_KEYS = {"group", "regime", "economy", "min_rarity", "max_rarity", "exclude", "quantity"}
 
 # quest settings whose name in the file differs from the model field
@@ -458,6 +458,26 @@ class PassLoader:
             return None
         return line
 
+    def _frame_key(self, spec: dict[str, Any], name: str) -> str:
+        """
+        The frame every treasure of a reward is given: the name or the key of a frame, or "none" for a card that
+        stays plain even when a frame is running on the day the reward is claimed.
+        """
+        key = str(spec.get("frame_key") or "").strip()
+        if len(key) > 32:
+            self.errors.append(f'Reward "{name}": a frame key is at most 32 characters.')
+            return ""
+        return key
+
+    def _check_frame(self, line: RewardLine, name: str) -> None:
+        """
+        A frame the treasure doesn't carry is a typo: say it now, instead of handing out a plain card later.
+        """
+        if not line.frame_key or wants_no_frame(line.frame_key) or line.ball is None:
+            return
+        if frame_entry(line.ball, line.frame_key) is None:
+            self.errors.append(f'Reward "{name}": {line.ball.country} has no frame called "{line.frame_key}".')
+
     def _reward(self, name: str, spec: dict[str, Any], counted_in: str | None) -> Reward:
         self._check_keys(spec, REWARD_KEYS, f'Reward "{name}"')
         mode = spec.get("mode", RewardMode.ALL)
@@ -468,6 +488,7 @@ class PassLoader:
             name=name[:64], defaults={"mode": mode, "pick": spec.get("pick", 1), "offer": spec.get("offer", 0)}
         )
         reward.lines.all().delete()
+        frame_key = self._frame_key(spec, name)
         lines = [
             RewardLine(
                 reward=reward,
@@ -475,13 +496,17 @@ class PassLoader:
                 ball=self._ball(card),
                 special=self.card_special,
                 bonus_mode=BonusMode.RANDOM,
+                frame_key=frame_key,
             )
             for card in spec.get("cards", [])
         ]
+        for line in lines:
+            self._check_frame(line, name)
         pools = spec.get("pool")
         for pool_spec in [pools] if isinstance(pools, dict) else (pools or []):
             pool_line = self._pool_line(reward, pool_spec, name)
             if pool_line is not None:
+                pool_line.frame_key = frame_key
                 lines.append(pool_line)
         if tokens := spec.get("tokens", 0):
             if self.token is None:
@@ -489,7 +514,12 @@ class PassLoader:
             # the token's own settings decide whether it can be traded or sold, not the reward
             lines.append(
                 RewardLine(
-                    reward=reward, kind=RewardKind.TREASURE, ball=self.token, quantity=tokens, bonus_mode=BonusMode.ZERO
+                    reward=reward,
+                    kind=RewardKind.TREASURE,
+                    ball=self.token,
+                    quantity=tokens,
+                    bonus_mode=BonusMode.ZERO,
+                    frame_key=frame_key,
                 )
             )
             if counted_in:

@@ -468,7 +468,8 @@
             "cards": [
               "Perona"
             ],
-            "berries": 5000
+            "berries": 5000,
+            "frame_key": "none"
           }
         }
       ]
