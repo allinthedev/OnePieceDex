@@ -47,6 +47,11 @@ def pick_spawn_frame(view: BallSpawnView) -> dict | None:
     """
     The frame shown by a spawn. The treasure caught from it gets the same frame, see `frame_of_new_treasure`.
     """
+    forced = getattr(view, "forced_frame", None)
+    if forced:
+        # an admin naming a frame on the spawn command: no roll, no date to match
+        view.picked_frame = forced  # type: ignore[attr-defined]
+        return forced
     if view.ballinstance is not None:
         # a dropped treasure keeps its own frame
         return view.ballinstance.extra_data if view.ballinstance.framed else None

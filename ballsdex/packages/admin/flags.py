@@ -48,6 +48,9 @@ class SpawnFlags(FlagConverter):
     special: SpecialTransform | None = flag(
         description="Force the countryball to have a special attribute when caught."
     )
+    frame_name: str | None = flag(
+        description="Spawn it with this frame, by name. With special=Frame and no name, the frame of the day."
+    )
     atk_bonus: int | None = flag(description="Force the countryball to have a specific attack bonus when caught.")
     hp_bonus: int | None = flag(description="Force the countryball to have a specific health bonus when caught.")
 
