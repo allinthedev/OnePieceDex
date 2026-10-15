@@ -66,7 +66,7 @@ class RequirementsInline(admin.TabularInline):
     model = CollectorRequirement
     extra = 0
     autocomplete_fields = ("ball", "special")
-    fields = ("level", "ball", "special", "amount", "delete_balls")
+    fields = ("level", "ball", "special", "frame_key", "amount", "delete_balls")
     ordering = ("level__position", "amount")
     verbose_name_plural = "Requirements (each one belongs to a tier)"
 
@@ -189,6 +189,7 @@ class CollectorAdmin(admin.ModelAdmin):
                             level=level,
                             ball_id=requirement.ball_id,
                             special_id=requirement.special_id,
+                            frame_key=requirement.frame_key,
                             amount=requirement.amount * multiplier,
                             delete_balls=data["delete_balls"] or requirement.delete_balls,
                         )

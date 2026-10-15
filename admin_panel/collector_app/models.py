@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from bd_models.models import Ball, BallInstance, Player, Special, balls, specials
+from bd_models.models import Ball, BallInstance, Player, Special, balls, frame_entry, specials
 
 
 class CollectorSettings(models.Model):
@@ -187,6 +188,14 @@ class CollectorRequirement(models.Model):
     ball_id: int | None
     special = models.ForeignKey(Special, on_delete=models.SET_NULL, null=True, blank=True)
     special_id: int | None
+    frame_key = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text='Only the copies carrying this frame count, by its name ("OPDex Birthday") or by its key. The '
+        "frame must be one of the required treasure's and must have a name. Leave empty for any copy, framed or "
+        'not, and pick the "Frame" special instead to accept any frame.',
+    )
     amount = models.PositiveIntegerField(default=1)
     delete_balls = models.BooleanField(
         default=False,
@@ -202,10 +211,43 @@ class CollectorRequirement(models.Model):
     def cached_special(self) -> "Special | None":
         return specials.get(self.special_id) or self.special if self.special_id else None
 
+    @property
+    def frame_name(self) -> str:
+        """
+        The name of the frame this requirement asks for, as the copies given with it carry it. Empty when it asks
+        for no particular frame, and when the key points at nothing: an unknown frame must match no treasure
+        rather than every one of them, so the caller checks `frame_key` before reading this.
+        """
+        if not self.frame_key:
+            return ""
+        ball = self.cached_ball
+        entry = frame_entry(ball, self.frame_key) if ball else None
+        return str((entry or {}).get("name") or "")
+
+    def clean(self) -> None:
+        super().clean()
+        if not self.frame_key:
+            return
+        if not self.ball_id:
+            raise ValidationError({"frame_key": "Name the treasure as well: a frame belongs to one treasure."})
+        # read the treasure of the form rather than the cache, the frame may have been added a minute ago
+        entry = frame_entry(self.ball, self.frame_key)
+        if entry is None:
+            raise ValidationError({"frame_key": f'{self.ball.country} has no frame called "{self.frame_key}".'})
+        if not entry.get("name"):
+            raise ValidationError(
+                {
+                    "frame_key": "That frame has no name, so the copies carrying it cannot be told apart. Give it "
+                    "one in the Frames section first."
+                }
+            )
+
     def __str__(self):
         title = f"{self.collector.name} requirement: X{self.amount} "
         if self.ball:
             title += f"{self.ball.country} "
+        if self.frame_key:
+            title += f"[{self.frame_name or self.frame_key}] "
         if self.special:
             title += f"{self.special.name}"
         return title
