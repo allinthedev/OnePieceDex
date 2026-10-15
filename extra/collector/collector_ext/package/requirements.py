@@ -11,11 +11,22 @@ from collector_app.models import CollectorInstance, CollectorRequirement, Collec
 from currency_app.ledger import adjust_money
 from currency_app.models import BerryTransaction
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Case, Count, Q, When
+from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 
 from ballsdex.core.game_events import Event, EventContext, bus
-from bd_models.models import BallInstance, Player, balls, frame_entry, mark_no_frame, wants_no_frame
+from bd_models.models import (
+    FRAMED,
+    BallInstance,
+    Player,
+    balls,
+    frame_entry,
+    is_frame_special,
+    mark_no_frame,
+    special_filter,
+    wants_no_frame,
+)
 from bd_models.signals import notify_ownership_change
 from settings.models import settings
 
@@ -37,7 +48,12 @@ class RequirementStatus:
     def label(self, bot: "BallsDexBot | None" = None) -> str:
         ball = self.requirement.cached_ball
         special = self.requirement.cached_special
-        name = " ".join(x for x in (special.name if special else "", ball.country if ball else "") if x)
+        frame = self.requirement.frame_name or self.requirement.frame_key
+        if not frame and is_frame_special(special):
+            # "Frame venustoken" reads like a special, "framed venustoken" reads like what it is
+            frame, special = "framed", None
+        parts = (frame, special.name if special else "", ball.country if ball else "")
+        name = " ".join(x for x in parts if x)
         emoji = bot.get_emoji(ball.emoji_id) if bot and ball else None
         return f"{f'{emoji} ' if emoji else ''}{name or settings.plural_collectible_name}"
 
@@ -78,8 +94,13 @@ def requirement_queryset(
     queryset = BallInstance.objects.filter(player_id=player_id)
     if requirement.ball_id:
         queryset = queryset.filter(ball_id=requirement.ball_id)
+    if requirement.frame_key:
+        # a frame is kept on the treasure by name: an unknown one must count nothing, not everything
+        name = requirement.frame_name
+        queryset = queryset.filter(extra_data__name=name) if name else queryset.none()
     if requirement.special_id:
-        queryset = queryset.filter(special_id=requirement.special_id)
+        # the "Frame" special is never given to a treasure, it asks for a framed copy whatever special it carries
+        queryset = queryset.filter(special_filter(requirement.cached_special or requirement.special))
     elif excluded_specials:
         queryset = queryset.exclude(special_id__in=excluded_specials)
     return queryset
@@ -94,9 +115,21 @@ class OwnedCounts:
     by_ball_and_special: dict[tuple[int, int | None], int]
     by_ball: dict[int, int]
     by_special: dict[int, int]
+    by_ball_and_frame: dict[tuple[int, str], int]
+    framed_by_ball: dict[int, int]
     total: int
+    framed_total: int
 
     def count(self, requirement: CollectorRequirement) -> int:
+        if requirement.frame_key:
+            # one frame in particular, counted by the name the copies carry; an unknown frame counts nothing
+            name = requirement.frame_name
+            if not name or not requirement.ball_id:
+                return 0
+            return self.by_ball_and_frame.get((requirement.ball_id, name), 0)
+        if is_frame_special(requirement.cached_special):
+            # any frame at all
+            return self.framed_by_ball.get(requirement.ball_id, 0) if requirement.ball_id else self.framed_total
         if requirement.ball_id and requirement.special_id:
             return self.by_ball_and_special.get((requirement.ball_id, requirement.special_id), 0)
         if requirement.ball_id:
@@ -109,8 +142,14 @@ class OwnedCounts:
 def owned_counts(player_id: int, excluded_specials: set[int] | None = None) -> OwnedCounts:
     if excluded_specials is None:
         excluded_specials = collector_card_special_ids()
-    counts = OwnedCounts({}, {}, {}, 0)
-    rows = BallInstance.objects.filter(player_id=player_id).values("ball_id", "special_id").annotate(n=Count("id"))
+    counts = OwnedCounts({}, {}, {}, {}, {}, 0, 0)
+    rows = (
+        BallInstance.objects.filter(player_id=player_id)
+        # the frame a treasure carries is kept in its extra_data, under the name staff gave it
+        .annotate(frame=KeyTextTransform("name", "extra_data"), framed=Case(When(FRAMED, then=1), default=0))
+        .values("ball_id", "special_id", "frame", "framed")
+        .annotate(n=Count("id"))
+    )
     for row in rows:
         ball_id, special_id, amount = row["ball_id"], row["special_id"], row["n"]
         counts.by_ball_and_special[(ball_id, special_id)] = (
@@ -122,6 +161,12 @@ def owned_counts(player_id: int, excluded_specials: set[int] | None = None) -> O
         if special_id not in excluded_specials:
             counts.by_ball[ball_id] = counts.by_ball.get(ball_id, 0) + amount
             counts.total += amount
+            if row["framed"]:
+                counts.framed_by_ball[ball_id] = counts.framed_by_ball.get(ball_id, 0) + amount
+                counts.framed_total += amount
+                if frame := row["frame"]:
+                    key = (ball_id, frame)
+                    counts.by_ball_and_frame[key] = counts.by_ball_and_frame.get(key, 0) + amount
     return counts
 
 

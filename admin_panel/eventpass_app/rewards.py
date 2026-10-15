@@ -222,7 +222,8 @@ def _line_text(line: RewardLine, ball: Ball | None) -> str:
         return str(line)
     special = line.cached_special
     text = f"{line.quantity}x {special.name + ' ' if special else ''}{ball.country}"
-    return f"{text} (framed)" if line.frame_key else text
+    # "none" is a frame key asking for a plain card, it is not a frame
+    return f"{text} (framed)" if line.frame_key and not wants_no_frame(line.frame_key) else text
 
 
 def _options(lines: list[RewardLine]) -> list[tuple[RewardLine, Ball | None]]:

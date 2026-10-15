@@ -21,7 +21,18 @@ from django.utils import timezone
 from merchant_app.models import MerchantItem
 
 from ballsdex.core.game_events import normalize_command
-from bd_models.models import Ball, BallGroup, Economy, Player, Regime, Special, balls, groups, specials
+from bd_models.models import (
+    Ball,
+    BallGroup,
+    Economy,
+    Player,
+    Regime,
+    Special,
+    balls,
+    groups,
+    specials,
+    wants_no_frame,
+)
 from settings.models import settings
 
 if TYPE_CHECKING:
@@ -328,7 +339,8 @@ class RewardLine(models.Model):
             return f"{prefix}{self.pool_description()}"
         ball = self.cached_ball
         text = f"{prefix}{ball.country if ball else '?'}"
-        return f"{text} (framed)" if self.frame_key else text
+        # "none" is a frame key asking for a plain card, it is not a frame
+        return f"{text} (framed)" if self.frame_key and not wants_no_frame(self.frame_key) else text
 
     class Meta:
         managed = True

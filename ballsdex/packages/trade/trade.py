@@ -686,7 +686,9 @@ class TradeInstance(LayoutView):
             return player
 
         def queryset_for_update(trader: TradingUser):
-            return trader.get_queryset().select_for_update(nowait=True, of=("self",)).only("player__discord_id")
+            # the whole row is loaded: these instances are handed to the ownership signal, and the packages
+            # reading them run in async tasks where a deferred field cannot be fetched
+            return trader.get_queryset().select_related("player").select_for_update(nowait=True, of=("self",))
 
         for countryball in queryset_for_update(self.trader1):
             if countryball.player.discord_id != self.trader1.player.discord_id:
