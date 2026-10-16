@@ -63,6 +63,18 @@ class TierState:
     def needs_confirmation(self) -> bool:
         return bool(self.tier.price) or any(status.requirement.delete_balls for status in self.statuses)
 
+    @property
+    def progress(self) -> float:
+        """
+        How close the player is to claiming, from 0 to 1. Lines count equally, so a recipe missing a copy of one
+        treasure out of two comes before one missing both, and 98 of the 99 copies asked beats 2 of them.
+        """
+        lines = [status for status in self.statuses if status.requirement.amount]
+        if not lines:
+            return 1.0
+        owned = sum(min(x.owned, x.requirement.amount) / x.requirement.amount for x in lines)
+        return owned / len(lines)
+
 
 @dataclass
 class RecipePage:
@@ -89,6 +101,11 @@ class RecipePage:
     def missing_count(self) -> int:
         # recipes that can't be claimed anymore come last
         return len(self.state.missing) if self.pending and self.state else 999
+
+    @property
+    def progress(self) -> float:
+        # recipes that can't be claimed anymore come last, below a recipe nothing has been gathered for
+        return self.state.progress if self.pending and self.state else -1.0
 
 
 def load_tier_states(player_id: int, tiers: list[CollectorTier]) -> list[TierState]:

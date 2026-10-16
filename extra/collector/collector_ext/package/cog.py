@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 import discord
 from asgiref.sync import sync_to_async
 from collector_app.models import Collector as CollectorModel
-from collector_app.models import CollectorInstance, CollectorRequirement, CollectorTier
+from collector_app.models import CollectorInstance, CollectorRequirement, CollectorTier, CollectorTierLevel
 from discord import app_commands
 from discord.ext import commands, tasks
 from discord.ui import Separator, TextDisplay
@@ -26,7 +26,7 @@ from .requirements import (
     owned_counts,
     tier_requirements,
 )
-from .transformers import CollectorEnabledTransform
+from .transformers import CollectorEnabledTransform, CollectorTierLevelTransform
 from .views import CollectorClaimView, RecipePage, TierState, load_tier_states
 
 if TYPE_CHECKING:
@@ -71,6 +71,7 @@ class Collector(commands.GroupCog):
         self,
         interaction: discord.Interaction["BallsDexBot"],
         collector: CollectorEnabledTransform | None = None,
+        tier: CollectorTierLevelTransform | None = None,
         show: app_commands.Choice[str] | None = None,
     ):
         """
@@ -80,41 +81,52 @@ class Collector(commands.GroupCog):
         ----------
         collector: Collector
             The collector to claim. Leave it empty to browse every recipe one by one.
+        tier: CollectorTierLevel
+            Only recipes of this kind, like Tier 1 or Elemental. Browsing one kind shows all of them.
         show: str
             When browsing, show the recipes you can claim right now or all of them.
         """
         await interaction.response.defer(thinking=True)
         player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
         only_ready = show is None or show.value == "ready"
+        if tier is not None:
+            # asking for one kind is browsing it: "ready to claim" would almost always come back empty
+            only_ready = False
 
         if collector is not None:
-            tiers = [
-                tier
-                async for tier in CollectorTier.objects.filter(collector=collector, enabled=True)
-                .select_related("level")
-                .order_by("level__position", "level_id")
-            ]
+            queryset = CollectorTier.objects.filter(collector=collector, enabled=True)
+            if tier is not None:
+                queryset = queryset.filter(level=tier)
+            tiers = [x async for x in queryset.select_related("level").order_by("level__position", "level_id")]
             if not tiers:
-                await interaction.followup.send("This collector can't be claimed right now.", ephemeral=True)
+                text = (
+                    f"{collector.name} has no {tier.name} recipe."
+                    if tier is not None
+                    else "This collector can't be claimed right now."
+                )
+                await interaction.followup.send(text, ephemeral=True)
                 return
             states = await sync_to_async(load_tier_states)(player.pk, tiers)
-            pages = [RecipePage(collector, tier, state) for tier, state in zip(tiers, states)]
+            pages = [RecipePage(collector, row, state) for row, state in zip(tiers, states)]
             # one page per recipe, opened on the one the player can claim, or else still work on
             index = next(
                 (i for i, page in enumerate(pages) if page.ready),
                 next((i for i, page in enumerate(pages) if page.pending), 0),
             )
         else:
-            pages = await self._browse_pages(player, only_ready=only_ready)
+            pages = await self._browse_pages(player, only_ready=only_ready, level=tier)
             index = 0
             if not pages:
-                await interaction.followup.send(
-                    "You can't claim any collector card right now. Use `show: Every recipe` to see them all "
-                    "and what you're missing."
-                    if only_ready
-                    else f"{settings.bot_name} doesn't have any collector active.",
-                    ephemeral=True,
-                )
+                if tier is not None:
+                    text = f"No {tier.name} recipe is running right now."
+                elif only_ready:
+                    text = (
+                        "You can't claim any collector card right now. Use `show: Every recipe` to see them all "
+                        "and what you're missing."
+                    )
+                else:
+                    text = f"{settings.bot_name} doesn't have any collector active."
+                await interaction.followup.send(text, ephemeral=True)
                 return
 
         view = CollectorClaimView(self.bot, player, pages, index=index)
@@ -122,16 +134,21 @@ class Collector(commands.GroupCog):
         await view.refresh()
         view.message = await interaction.followup.send(view=view, wait=True)
 
-    async def _browse_pages(self, player: Player, *, only_ready: bool) -> list[RecipePage]:
+    async def _browse_pages(
+        self, player: Player, *, only_ready: bool, level: CollectorTierLevel | None = None
+    ) -> list[RecipePage]:
         """
         One page per recipe, with the player's progress on it. Everything is counted from a single summary of the
         player's treasures, so browsing hundreds of collectors stays cheap.
         """
+        queryset = CollectorTier.objects.filter(enabled=True)
+        if level is not None:
+            queryset = queryset.filter(level=level)
         tiers = [
             tier
-            async for tier in CollectorTier.objects.filter(enabled=True)
-            .select_related("level", "collector")
-            .order_by("collector__name", "level__position", "level_id")
+            async for tier in queryset.select_related("level", "collector").order_by(
+                "collector__name", "level__position", "level_id"
+            )
         ]
         tiers = [tier for tier in tiers if tier.collector.active]
         if not tiers:
@@ -165,8 +182,8 @@ class Collector(commands.GroupCog):
 
         if only_ready:
             return [page for page in pages if page.ready]
-        # the sort is stable: the recipes of a collector stay in the order of their tiers
-        pages.sort(key=lambda page: (not page.ready, page.missing_count, page.collector.name))
+        # closest to claiming first, so the recipe a player is one treasure away from opens near the top
+        pages.sort(key=lambda page: (not page.ready, -page.progress, page.collector.name))
         return pages
 
     @app_commands.command(name="list")
