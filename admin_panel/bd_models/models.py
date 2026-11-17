@@ -24,7 +24,15 @@ from ballsdex.core.discord import View
 from ballsdex.core.image_generator.image_gen import draw_card
 from settings.models import settings
 
-from .enums import DonationPolicy, FriendPolicy, MentionPolicy, PrivacyPolicy, SpecialLayer, TradeCooldownPolicy
+from .enums import (
+    BerryPolicy,
+    DonationPolicy,
+    FriendPolicy,
+    MentionPolicy,
+    PrivacyPolicy,
+    SpecialLayer,
+    TradeCooldownPolicy,
+)
 
 if TYPE_CHECKING:
     from django.db.models.fields.files import ImageFieldFile
@@ -109,6 +117,11 @@ class Player(models.Model):
         choices=DonationPolicy.choices,
         help_text="How you want to handle donations",
         default=DonationPolicy.ALWAYS_ACCEPT,
+    )
+    berry_policy = models.SmallIntegerField(
+        choices=BerryPolicy.choices,
+        help_text="Who may send you currency with the give command",
+        default=BerryPolicy.ALWAYS_ACCEPT,
     )
     privacy_policy = models.SmallIntegerField(
         choices=PrivacyPolicy.choices, help_text="How you want to handle inventory privacy", default=PrivacyPolicy.DENY
@@ -890,3 +903,119 @@ class Block(models.Model):
     class Meta:
         managed = True
         db_table = "block"
+
+
+class Bounty(models.Model):
+    """
+    A wanted poster: the first player to catch this treasure while the bounty is live takes the
+    reward, and the card they catch comes out already carrying the special below.
+
+    A bounty is claimed once and never again. The claim is a conditional update rather than a
+    read followed by a write, so two players catching in the same instant cannot both collect
+    it — one update finds the row unclaimed, the other finds nothing to update.
+    """
+
+    ball = models.ForeignKey(
+        Ball, on_delete=models.CASCADE, related_name="bounties", help_text="The treasure with a price on its head."
+    )
+    ball_id: int
+    reward = models.PositiveBigIntegerField(
+        help_text="Paid to the first player who catches it while the bounty is live."
+    )
+    special = models.ForeignKey(
+        "Special",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Put on the card that claims the bounty. A foreground special works best here: it is laid "
+        "over the finished card, which is what makes it look like a wanted poster.",
+    )
+    special_id: int | None
+    starts_at = models.DateTimeField(help_text="The bounty is dead before this.")
+    ends_at = models.DateTimeField(help_text="And dead again after this, claimed or not.")
+    announcement_text = models.CharField(
+        max_length=256,
+        blank=True,
+        default="",
+        help_text="What the announcement says. Left empty, the poster names the treasure and the reward.",
+    )
+    announced_at = models.DateTimeField(
+        null=True, blank=True, help_text="When the poster went out. Clear it to have the bot announce again."
+    )
+    claimed_by = models.ForeignKey(
+        Player,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bounties_claimed",
+        help_text="Who got there first. Clearing this puts the bounty back up for grabs.",
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    claimed_instance = models.ForeignKey(
+        "BallInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The card that claimed it.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+
+    objects: Manager[Self] = Manager()
+
+    @property
+    def cached_ball(self) -> Ball:
+        return balls.get(self.ball_id) or self.ball
+
+    @property
+    def cached_special(self) -> "Special | None":
+        # falls back to the database on a cache miss: a special created since the bot last
+        # loaded its cache is not in it, and a bounty would then hand out a plain card
+        return (specials.get(self.special_id) or self.special) if self.special_id else None
+
+    def is_live(self, at: datetime | None = None) -> bool:
+        """Whether this bounty can still be claimed right now."""
+        at = at or timezone.now()
+        return self.claimed_by_id is None and self.starts_at <= at <= self.ends_at
+
+    @classmethod
+    async def aclaim(cls, ball_id: int, player: Player) -> "Bounty | None":
+        """
+        Hand whichever live bounty sits on this treasure to the player, or None if there is none
+        left to take. The richest is claimed first when several are running at once.
+        """
+        at = timezone.now()
+        candidates = cls.objects.filter(
+            ball_id=ball_id, claimed_by__isnull=True, starts_at__lte=at, ends_at__gte=at
+        ).order_by("-reward", "pk")
+        async for bounty in candidates:
+            # whoever's update finds the row still unclaimed is the one who caught it first
+            if await cls.objects.filter(pk=bounty.pk, claimed_by__isnull=True).aupdate(
+                claimed_by=player, claimed_at=at
+            ):
+                bounty.claimed_by = player
+                bounty.claimed_at = at
+                return bounty
+        return None
+
+    async def arelease(self) -> None:
+        """Put the bounty back up, for when the catch it was claimed by never completed."""
+        await Bounty.objects.filter(pk=self.pk).aupdate(claimed_by=None, claimed_at=None, claimed_instance=None)
+        self.claimed_by = None
+        self.claimed_at = None
+
+    class Meta:
+        managed = True
+        db_table = "bounty"
+        verbose_name_plural = "bounties"
+        ordering = ("-starts_at",)
+        indexes = (
+            models.Index(fields=("ball", "claimed_by"), name="bounty_ball_claimed_idx"),
+            models.Index(fields=("starts_at", "ends_at"), name="bounty_window_idx"),
+        )
+        constraints = (
+            models.CheckConstraint(condition=Q(ends_at__gt=F("starts_at")), name="bounty_ends_after_start"),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.cached_ball.country} — {self.reward:,}"

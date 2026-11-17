@@ -83,6 +83,9 @@ class Event(StrEnum):
     GIFT = "gift"  # a player gave treasures away with the give command
     FRIEND = "friend"  # a player became friends with someone
     BATTLE_WIN = "battle_win"  # a player won a battle
+    BATTLE_PLAYED = "battle_played"  # a player took part in a battle, win or lose
+    BOSS_PLAYED = "boss_played"  # a player took part in a boss fight that reached its end
+    BOSS_WIN = "boss_win"  # a player was named the winner of a boss fight
     COMMAND = "command"  # a player used a slash command
 
     # -- berries

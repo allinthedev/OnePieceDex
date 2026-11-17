@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from asgiref.sync import sync_to_async
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -153,6 +154,86 @@ class GlobalShop(models.Model):
     name = models.CharField(max_length=64, unique=True)
     banner = models.ImageField(null=True, blank=True, help_text="An optional promotional banner for this shop.")
     items = models.ManyToManyField(MerchantItem, blank=True)
+
+    announcement_text = models.CharField(
+        max_length=256,
+        blank=True,
+        default="",
+        help_text="What the announcement says when this shop is announced in the spawn channels. Left empty, "
+        "the shop simply says it has new stock.",
+    )
+    happy_hour_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="How long the discount below runs after the shop is announced, in minutes. 0 turns the happy "
+        "hour off.",
+    )
+    happy_hour_discount_percent = models.PositiveIntegerField(
+        default=0,
+        validators=(MaxValueValidator(100),),
+        help_text="Taken off every price in this shop during the happy hour, in percent.",
+    )
+    announced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this shop was last announced. The happy hour is counted from here, so clearing this "
+        "ends it early.",
+    )
+
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, "Monday"
+        TUESDAY = 1, "Tuesday"
+        WEDNESDAY = 2, "Wednesday"
+        THURSDAY = 3, "Thursday"
+        FRIDAY = 4, "Friday"
+        SATURDAY = 5, "Saturday"
+        SUNDAY = 6, "Sunday"
+
+    auto_announce_weekday = models.SmallIntegerField(
+        choices=Weekday.choices,
+        null=True,
+        blank=True,
+        help_text="Announce this shop by itself every week on this day. Leave empty to only ever announce it "
+        "by hand.",
+    )
+    auto_announce_hour = models.PositiveSmallIntegerField(
+        default=20,
+        validators=(MaxValueValidator(23),),
+        help_text="The hour, UTC, of the weekly announcement above. 20 is 8pm UTC, so 9pm in Paris in winter.",
+    )
+
+    def due_for_announcement(self, now: datetime) -> bool:
+        """
+        Whether the weekly announcement should go out right now.
+
+        The check is loose on the minute and strict on the day: the loop runs every few minutes,
+        and the last announcement is what stops it from firing again within the same hour.
+        """
+        if self.auto_announce_weekday is None:
+            return False
+        if now.weekday() != self.auto_announce_weekday or now.hour != self.auto_announce_hour:
+            return False
+        return self.announced_at is None or now - self.announced_at >= timedelta(hours=12)
+
+    @property
+    def happy_hour_ends_at(self) -> datetime | None:
+        """When the discount stops, or None when this shop has no happy hour running."""
+        if not (self.announced_at and self.happy_hour_minutes and self.happy_hour_discount_percent):
+            return None
+        return self.announced_at + timedelta(minutes=self.happy_hour_minutes)
+
+    def discount_now(self) -> int:
+        """The discount running in this shop right now, in percent. 0 outside the happy hour."""
+        ends_at = self.happy_hour_ends_at
+        if ends_at is None or timezone.now() >= ends_at:
+            return 0
+        return min(self.happy_hour_discount_percent, 100)
+
+    @staticmethod
+    def discounted(price: int | None, percent: int) -> int:
+        """What `price` costs once `percent` is taken off it."""
+        if not price or not percent:
+            return price or 0
+        return max(0, round(price * (1 - min(percent, 100) / 100)))
 
     class Meta:
         managed = True

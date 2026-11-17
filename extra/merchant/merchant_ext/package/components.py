@@ -34,9 +34,13 @@ class BuyItemView(Pages):
         self.add_item(self.buy_item_select)
 
     def set_options(self, items: list[MerchantItem]):
+        discount = self.shop.discount_now()
         options: list[discord.SelectOption] = []
         for item in items:
-            description = f"Prize: {item.prize if item.prize else 'Free'}"
+            if discount and item.prize:
+                description = f"Prize: {GlobalShop.discounted(item.prize, discount)} (-{discount}%)"
+            else:
+                description = f"Prize: {item.prize if item.prize else 'Free'}"
             if item.stock is not None:
                 description += f" • {item.stock_text}"
             options.append(discord.SelectOption(label=item.name, description=description, value=str(item.pk)))
@@ -60,9 +64,14 @@ class BuyItemView(Pages):
             await interaction.followup.send("You're not registred in the economy system yet.")
             return
 
+        # read again at the click, not when the menu was built: a happy hour that ran out while the
+        # player was browsing must not still take berries off
+        discount = self.shop.discount_now()
         try:
-            instance = await buy_item(self.bot, player, item, server_id=interaction.guild_id)
+            instance = await buy_item(
+                self.bot, player, item, server_id=interaction.guild_id, discount_percent=discount
+            )
         except PurchaseError as error:
             await interaction.followup.send(str(error))
             return
-        await interaction.followup.send(purchase_message(self.bot, item, instance))
+        await interaction.followup.send(purchase_message(self.bot, item, instance, discount_percent=discount))

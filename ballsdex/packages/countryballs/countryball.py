@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 import discord
+from crew_app.models import CrewWarRule
+from crew_app.scoring import score_quietly
 from currency_app.models import BerryTransaction, CurrencySettings
 from discord.ui import ActionRow, Button, Item, MediaGallery, TextDisplay, TextInput, button
 from django.utils import timezone
@@ -21,6 +23,7 @@ from bd_models.models import (
     FRAME_EMOJI,
     Ball,
     BallInstance,
+    Bounty,
     GuildConfig,
     Player,
     Special,
@@ -183,6 +186,9 @@ class BallSpawnView(LayoutView):
         Force a specific attack bonus if set, otherwise random range defined in config.yml.
     hp_bonus: int | None
         Force a specific health bonus if set, otherwise random range defined in config.yml.
+    claimed_bounty: Bounty | None
+        The wanted poster this catch collected, once `catch_ball` has run. None when there was
+        none on this treasure, or when someone else got to it first.
     """
 
     def __init__(self, bot: "BallsDexBot", model: Ball):
@@ -196,6 +202,8 @@ class BallSpawnView(LayoutView):
         self.special: Special | None = None
         self.atk_bonus: int | None = None
         self.hp_bonus: int | None = None
+        # set by catch_ball when the catch collected a wanted poster, read by the catch message
+        self.claimed_bounty: Bounty | None = None
         self.og_id: int
 
         self.catch_row = CatchRow(self)
@@ -421,6 +429,39 @@ class BallSpawnView(LayoutView):
         cname = cname.replace("\u201d", '"')
         return cname in possible_names
 
+    async def _pay_bounty(
+        self, bounty: Bounty, ball: BallInstance, player: Player, user: discord.User | discord.Member
+    ) -> Bounty | None:
+        """
+        Hand over a claimed wanted poster: tie it to the card that took it, and pay the reward.
+
+        A failure here does not undo the catch — the card is already theirs — so the poster goes
+        back up and the catch message simply says nothing about a bounty.
+        """
+        try:
+            await Bounty.objects.filter(pk=bounty.pk).aupdate(claimed_instance=ball)
+            if bounty.reward:
+                await player.add_money(
+                    bounty.reward,
+                    reason=BerryTransaction.Reason.BOUNTY,
+                    description=f"Bounty on {self.name}",
+                    server_id=ball.server_id,
+                )
+        except Exception:
+            log.exception("Could not pay the bounty on %s to %s, putting it back up", self.name, user.id)
+            await bounty.arelease()
+            return None
+        await score_quietly(player.pk, CrewWarRule.Source.BOUNTY_CLAIMED)
+        log.info(
+            "%s (%s) claimed the bounty on %s for %s",
+            user,
+            user.id,
+            self.name,
+            bounty.reward,
+            extra={"webhook": True},
+        )
+        return bounty
+
     async def catch_ball(
         self, user: discord.User | discord.Member, *, player: Player | None, guild: discord.Guild | None
     ) -> tuple[BallInstance, bool]:
@@ -492,11 +533,17 @@ class BallSpawnView(LayoutView):
             else random.randint(-settings.max_health_bonus, settings.max_health_bonus)
         )
 
+        # a wanted poster is claimed before the card exists, so the special it carries can be put
+        # on at creation rather than added afterwards: the card is drawn with it from the start
+        bounty = await Bounty.aclaim(self.model.pk, player)
+
         # check if we can spawn cards with a special background
         special: Special | None = self.special
 
         if not special:
             special = self.get_random_special()
+        if bounty is not None and bounty.cached_special:
+            special = bounty.cached_special
 
         ball = BallInstance(
             ball=self.model,
@@ -511,7 +558,17 @@ class BallSpawnView(LayoutView):
         # transient attribute, read by the achievement post_save signal to notify in the
         # channel the catch actually happened in, instead of a guild's configured spawn channel
         ball._catch_channel_id = self.message.channel.id  # type: ignore
-        await ball.asave()
+        try:
+            await ball.asave()
+        except Exception:
+            # the card never came into being, so the poster goes back up rather than staying
+            # claimed by a catch that did not happen
+            if bounty is not None:
+                await bounty.arelease()
+            raise
+
+        if bounty is not None:
+            self.claimed_bounty = await self._pay_bounty(bounty, ball, player, user)
 
         # logging and stats
         log.log(
@@ -542,6 +599,12 @@ class BallSpawnView(LayoutView):
             (as returned by `catch_ball`)
         """
         text = ""
+        if self.claimed_bounty is not None:
+            bounty = self.claimed_bounty
+            text += "🏴‍☠️ **Wanted poster claimed!** You were first, and the bounty is yours"
+            if bounty.reward:
+                text += f": **{format_currency(bounty.reward, False, self.bot)}**"
+            text += ".\n"
         if ball.specialcard and ball.specialcard.catch_phrase:
             text += f"*{ball.specialcard.catch_phrase}*\n"
         if new_ball:

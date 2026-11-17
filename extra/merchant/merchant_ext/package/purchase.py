@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from currency_app.models import BerryTransaction
 from django.db.models import F
 from django.utils import timezone
-from merchant_app.models import MerchantItem, MerchantPurchase, merchant_items
+from merchant_app.models import GlobalShop, MerchantItem, MerchantPurchase, merchant_items
 
 from ballsdex.core.game_events import Event, EventContext, bus
 from bd_models.models import BallInstance, Player
@@ -46,17 +46,21 @@ async def _refresh_cached_stock(item: MerchantItem):
 
 
 async def buy_item(
-    bot: "BallsDexBot", player: Player, item: MerchantItem, *, server_id: int | None = None
+    bot: "BallsDexBot", player: Player, item: MerchantItem, *, server_id: int | None = None, discount_percent: int = 0
 ) -> BallInstance:
     """
     Buy a merchant item for a player: take one unit of stock if the item is limited, take the berries,
     then give the treasure. Every step is reverted if a later one fails.
+
+    `discount_percent` is the shop's happy hour, if one is running. It is taken off here rather than by the
+    caller so that the berries charged, the ledger line and the refund can never disagree about the price.
 
     Raises
     ------
     PurchaseError
         The purchase failed, with a message explaining why.
     """
+    price = GlobalShop.discounted(item.prize, discount_percent)
     claimed = False
     if item.per_player_limit is not None:
         # raising the count only while it is under the limit is atomic, the same way the stock is:
@@ -84,12 +88,13 @@ async def buy_item(
             raise PurchaseError(f"**{item.name}** is sold out!")
 
     try:
-        if item.prize:
+        if price:
             try:
                 await player.remove_money(
-                    item.prize,
+                    price,
                     reason=BerryTransaction.Reason.MERCHANT_BUY,
-                    description=f"Bought {item.name} from the merchant",
+                    description=f"Bought {item.name} from the merchant"
+                    + (f" ({discount_percent}% off)" if discount_percent and item.prize else ""),
                     server_id=server_id,
                 )
             except ValueError:
@@ -111,9 +116,9 @@ async def buy_item(
             )
         except Exception:
             log.exception("Failed to create a ball instance while a user was buying an item.")
-            if item.prize:
+            if price:
                 await player.add_money(
-                    item.prize,
+                    price,
                     reason=BerryTransaction.Reason.MERCHANT_BUY,
                     description=f"Refunded {item.name}, the purchase failed",
                     server_id=server_id,
@@ -133,17 +138,22 @@ async def buy_item(
         context=EventContext(
             instances=[instance],
             merchant_item_id=item.pk,
-            price=item.prize or 0,
-            amount=-(item.prize or 0),
+            price=price,
+            amount=-price,
             server_id=server_id,
         ),
     )
     return instance
 
 
-def purchase_message(bot: "BallsDexBot", item: MerchantItem, instance: BallInstance) -> str:
-    price = f"**{format_currency(item.prize, False, bot)}!**" if item.prize else "**free!**"
+def purchase_message(
+    bot: "BallsDexBot", item: MerchantItem, instance: BallInstance, *, discount_percent: int = 0
+) -> str:
+    paid = GlobalShop.discounted(item.prize, discount_percent)
+    price = f"**{format_currency(paid, False, bot)}!**" if paid else "**free!**"
     text = f"You've bought {item.name} for {price}\n{instance.description(include_emoji=True, bot=bot)}"
+    if discount_percent and item.prize and paid != item.prize:
+        text += f"\n-# Happy hour: {discount_percent}% off, down from {format_currency(item.prize, False, bot)}."
     if item.stock is not None:
         text += f"\n-# {item.stock_text}"
     return text

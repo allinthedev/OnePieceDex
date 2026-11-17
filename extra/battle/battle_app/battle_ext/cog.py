@@ -824,9 +824,12 @@ class Battle(commands.GroupCog):
         except (discord.NotFound, discord.HTTPException):
             pass
 
-        await bus.dispatch(
-            winner_player, Event.BATTLE_WIN, channel_id=target_message.channel.id if target_message else None
-        )
+        channel_id = target_message.channel.id if target_message else None
+        await bus.dispatch(winner_player, Event.BATTLE_WIN, channel_id=channel_id)
+        # both sides get a participation event: a war scored on taking part should not only ever
+        # reward the player who won
+        for participant in {winner_player, loser_player}:
+            await bus.dispatch(participant, Event.BATTLE_PLAYED, channel_id=channel_id)
 
     async def _compute_earnings(
         self, winner: Player, loser: Player, winner_balls: list[dict], loser_balls: list[dict]

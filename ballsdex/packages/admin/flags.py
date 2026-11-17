@@ -1,7 +1,13 @@
 import discord
 from discord.ext.commands import FlagConverter, Range, flag
 
-from ballsdex.core.utils.transformers import BallTransform, EconomyTransform, RegimeTransform, SpecialTransform
+from ballsdex.core.utils.transformers import (
+    BallGroupTransform,
+    BallTransform,
+    EconomyTransform,
+    RegimeTransform,
+    SpecialTransform,
+)
 from settings.models import settings
 
 
@@ -38,6 +44,7 @@ class SpawnFlags(FlagConverter):
         description="The countryball you want to spawn. Random according to rarities if not specified.",
         aliases=collectible_aliases(),
     )
+    group: BallGroupTransform | None = flag(description="Only spawn from this group.")
     channel: discord.TextChannel | None = flag(
         description="The channel you want to spawn the countryball in. Current channel if not specified.", default=None
     )
@@ -60,6 +67,24 @@ class GiveBallFlags(FlagConverter):
     special: SpecialTransform | None = flag(description="A special event to set to this card")
     health_bonus: int | None = flag(description="Force a specific health bonus percentage")
     attack_bonus: int | None = flag(description="Force a specific attack bonus percentage")
+
+
+class BulkGiveFlags(FlagConverter):
+    # descriptions are kept terse on purpose: /admin is close to the 8000 character payload
+    # Discord allows for one command, and going over stops the whole tree from syncing
+    user: discord.User | None = flag(description="Who to give to.")
+    role: discord.Role | None = flag(description="Give to everyone with this role.")
+    n: Range[int, 1, 100] = flag(default=1, description="How many each player gets.")
+    countryball: BallTransform | None = flag(
+        description="Give this one. Random by rarity if left out.", aliases=collectible_aliases()
+    )
+    group: BallGroupTransform | None = flag(description="Only draw from this group.")
+    min_rarity: float | None = flag(description="Lowest rarity to draw from.")
+    max_rarity: float | None = flag(description="Highest rarity to draw from.")
+    special: SpecialTransform | None = flag(description="Put this special on every card.")
+    roll_specials: bool = flag(default=False, description="Roll a special per card, like a spawn.")
+    health_bonus: int | None = flag(description="Force a health bonus percentage")
+    attack_bonus: int | None = flag(description="Force an attack bonus percentage")
 
 
 class BallsCountFlags(FlagConverter):

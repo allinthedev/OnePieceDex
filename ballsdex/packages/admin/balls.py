@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import re
+from collections import Counter
 from datetime import date
 from typing import TYPE_CHECKING, cast
 
@@ -30,10 +31,11 @@ from bd_models.models import (
     frame_entry,
     special_filter,
 )
+from bd_models.models import balls as balls_cache
 from settings.models import settings
 from settings.utils import format_currency
 
-from .flags import BallsCountFlags, CreateFlags, GiveBallFlags, SpawnFlags
+from .flags import BallsCountFlags, BulkGiveFlags, CreateFlags, GiveBallFlags, SpawnFlags
 
 if TYPE_CHECKING:
     from ballsdex.packages.countryballs.cog import CountryBallsSpawner
@@ -41,6 +43,12 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("ballsdex.packages.admin.balls")
 FILENAME_RE = re.compile(r"^(.+)(\.\S+)$")
+
+# past this many cards in one go, bulkgive says what it is about to do and waits for a yes
+BULK_GIVE_CONFIRM_ABOVE = 25
+# and past this many it refuses outright: handing out this much in one command is far more
+# likely to be a typo in `n:` than something anyone meant
+BULK_GIVE_CEILING = 5000
 
 
 def _is_frame_special(special: Special | None) -> bool:
@@ -125,6 +133,27 @@ async def _spawn_frame(ctx: commands.Context[BallsDexBot], flags: SpawnFlags) ->
     return False, None
 
 
+def _random_from(countryball_cls: type["BallSpawnView"], bot: BallsDexBot, pool: list[Ball]):
+    """
+    Draw one treasure out of `pool`, weighted by rarity the same way a wild spawn is.
+
+    Returns None when nothing in the pool can be drawn, which lets the caller fall back to the
+    whole dex rather than refusing to spawn anything.
+    """
+    drawable = [ball for ball in pool if ball.rarity > 0]
+    if not drawable:
+        return None
+    chosen = random.choices(drawable, weights=[ball.rarity for ball in drawable], k=1)[0]
+    return countryball_cls(bot, chosen)
+
+
+async def _spawn_group_pool(flags: SpawnFlags) -> list[Ball] | None:
+    """The treasures a random spawn may pick from, when it was narrowed to a group."""
+    if not flags.group:
+        return None
+    return [ball async for ball in Ball.objects.filter(enabled=True, rarity__gt=0, groups=flags.group)]
+
+
 async def _spawn_bomb(
     ctx: commands.Context[BallsDexBot],
     countryball_cls: type["BallSpawnView"],
@@ -135,6 +164,7 @@ async def _spawn_bomb(
     atk_bonus: int | None = None,
     hp_bonus: int | None = None,
     frame: dict | None = None,
+    pool: list[Ball] | None = None,
 ):
     spawned = 0
     message: discord.Message
@@ -156,7 +186,8 @@ async def _spawn_bomb(
     try:
         for i in range(n):
             if not countryball:
-                ball = await countryball_cls.get_random(ctx.bot)
+                ball = _random_from(countryball_cls, ctx.bot, pool) if pool else None
+                ball = ball or await countryball_cls.get_random(ctx.bot)
             else:
                 ball = countryball_cls(ctx.bot, countryball)
             ball.special = special
@@ -217,6 +248,8 @@ async def spawn(ctx: commands.Context[BallsDexBot], *, flags: SpawnFlags):
     special = None if _is_frame_special(flags.special) else flags.special
 
     special_attrs = []
+    if flags.group is not None:
+        special_attrs.append(f"group={flags.group.name}")
     if special is not None:
         special_attrs.append(f"special={special.name}")
     if frame is not None:
@@ -225,6 +258,13 @@ async def spawn(ctx: commands.Context[BallsDexBot], *, flags: SpawnFlags):
         special_attrs.append(f"atk={flags.atk_bonus}")
     if flags.hp_bonus is not None:
         special_attrs.append(f"hp={flags.hp_bonus}")
+    pool = await _spawn_group_pool(flags)
+    if flags.group and not pool:
+        await ctx.send(
+            f"No {settings.collectible_name} in group `{flags.group.name}` can spawn.", ephemeral=True
+        )
+        return
+
     if flags.n > 1:
         await _spawn_bomb(
             ctx,
@@ -236,6 +276,7 @@ async def spawn(ctx: commands.Context[BallsDexBot], *, flags: SpawnFlags):
             flags.atk_bonus,
             flags.hp_bonus,
             frame,
+            pool,
         )
         log.info(
             f"{ctx.author} spawned {settings.collectible_name}"
@@ -246,10 +287,12 @@ async def spawn(ctx: commands.Context[BallsDexBot], *, flags: SpawnFlags):
         return
 
     await ctx.defer(ephemeral=True)
-    if not flags.countryball:
-        ball = await cog.countryball_cls.get_random(ctx.bot)
-    else:
+    if flags.countryball:
         ball = cog.countryball_cls(ctx.bot, flags.countryball)
+    else:
+        ball = (_random_from(cog.countryball_cls, ctx.bot, pool) if pool else None) or await (
+            cog.countryball_cls.get_random(ctx.bot)
+        )
     ball.special = special
     ball.atk_bonus = flags.atk_bonus
     ball.hp_bonus = flags.hp_bonus
@@ -306,6 +349,192 @@ async def give(ctx: commands.Context[BallsDexBot], user: discord.User, *, flags:
         f"{ctx.author} gave {settings.collectible_name} {flags.countryball.country} (`{instance.pk:0X}`) "
         f"to {user}. (Special={flags.special.name if flags.special else None} "
         f"ATK={instance.attack_bonus:+d} HP={instance.health_bonus:+d}).",
+        extra={"webhook": True},
+    )
+
+
+def _bulk_give_pool(flags: BulkGiveFlags):
+    """
+    Which countryballs a random bulk give may hand out.
+
+    Disabled ones, and ones at a rarity of 0, are left out: they do not spawn, so handing them
+    out at random is never what was meant. Naming one in `countryball:` still gives it.
+    """
+    query = Ball.objects.filter(enabled=True, rarity__gt=0)
+    if flags.group:
+        query = query.filter(groups=flags.group)
+    if flags.min_rarity is not None:
+        query = query.filter(rarity__gte=flags.min_rarity)
+    if flags.max_rarity is not None:
+        query = query.filter(rarity__lte=flags.max_rarity)
+    return query
+
+
+def _bulk_give_specials(flags: BulkGiveFlags) -> str:
+    """How specials are being handed out, for the recap and the log."""
+    if flags.special:
+        return f"`{flags.special.name}` on every card"
+    if flags.roll_specials:
+        return "rolled per card, like a spawn"
+    return "none"
+
+
+def _bulk_give_scope(flags: BulkGiveFlags) -> str:
+    """What the draw was narrowed down to, for the recap and the log."""
+    parts = []
+    if flags.group:
+        parts.append(f"group `{flags.group.name}`")
+    if flags.min_rarity is not None:
+        parts.append(f"rarity ≥ {flags.min_rarity}")
+    if flags.max_rarity is not None:
+        parts.append(f"rarity ≤ {flags.max_rarity}")
+    return ", ".join(parts) if parts else f"every obtainable {settings.collectible_name}"
+
+
+async def _bulk_give_targets(
+    ctx: commands.Context[BallsDexBot], flags: BulkGiveFlags
+) -> list[discord.User | discord.Member] | None:
+    """
+    Everyone this command is about to give to, or None once it has explained why it cannot.
+
+    A player named twice — passed as `user:` and also holding the role — is only counted once.
+    """
+    targets: dict[int, discord.User | discord.Member] = {}
+    if flags.user:
+        targets[flags.user.id] = flags.user
+    if flags.role:
+        if not ctx.bot.intents.members:
+            await ctx.send(
+                "Giving to a whole role needs the members intent, and it is off, so I cannot see who holds "
+                f"{flags.role.mention}.\nTick **Server Members Intent** on the bot's page in the Discord "
+                "developer portal, then add `--enable-members-intent` to the bot's start command and restart "
+                "it. Until then, give to players one at a time with `user:`.",
+                ephemeral=True,
+            )
+            return None
+        for member in flags.role.members:
+            if not member.bot:
+                targets.setdefault(member.id, member)
+        if not targets:
+            await ctx.send(f"Nobody holds {flags.role.mention} right now.", ephemeral=True)
+            return None
+    if not targets:
+        await ctx.send("Tell me who to give to: pass `user:`, `role:`, or both.", ephemeral=True)
+        return None
+    return list(targets.values())
+
+
+@balls.command(name="bulkgive")
+@checks.has_permissions("bd_models.add_ballinstance")
+async def bulkgive(ctx: commands.Context[BallsDexBot], *, flags: BulkGiveFlags):
+    """
+    Give several countryballs at once, to a player or a role.
+    """
+    await ctx.defer(ephemeral=True)
+
+    if flags.special and flags.roll_specials:
+        await ctx.send(
+            "Pick one: `special:` puts that special on every card, `roll_specials:` rolls one per card. "
+            "Leaving both out gives plain cards.",
+            ephemeral=True,
+        )
+        return
+
+    targets = await _bulk_give_targets(ctx, flags)
+    if targets is None:
+        return
+
+    total = len(targets) * flags.n
+    if total > BULK_GIVE_CEILING:
+        await ctx.send(
+            f"That is {total:,} {settings.plural_collectible_name} in one go, over the ceiling of "
+            f"{BULK_GIVE_CEILING:,}. Lower `n:`, or narrow the role down.",
+            ephemeral=True,
+        )
+        return
+
+    if flags.countryball:
+        pool = [(flags.countryball.pk, flags.countryball.rarity)]
+        what = f"`{flags.countryball.country}`"
+    else:
+        pool = [(pk, rarity) async for pk, rarity in _bulk_give_pool(flags).values_list("pk", "rarity")]
+        if not pool:
+            await ctx.send(
+                f"No {settings.collectible_name} matches that: {_bulk_give_scope(flags)}.", ephemeral=True
+            )
+            return
+        what = f"at random out of {len(pool)} ({_bulk_give_scope(flags)})"
+
+    if total > BULK_GIVE_CONFIRM_ABOVE:
+        who = targets[0].mention if len(targets) == 1 else f"**{len(targets)}** players"
+        view = ConfirmChoiceView(ctx, accept_message="Confirmed, giving...", cancel_message="Nothing was given.")
+        await ctx.send(
+            f"About to give **{flags.n}** {settings.plural_collectible_name} to {who} — "
+            f"**{total:,}** cards in total, {what}.\nSpecials: {_bulk_give_specials(flags)}.",
+            view=view,
+            ephemeral=True,
+        )
+        await view.wait()
+        if not view.value:
+            return
+
+    # imported here rather than at the top: the countryballs package pulls in the spawn machinery,
+    # and this module is loaded even on a bot running without it
+    from ballsdex.packages.countryballs.countryball import BallSpawnView
+
+    population = [ball_id for ball_id, _ in pool]
+    weights = [rarity for _, rarity in pool]
+    instances: list[BallInstance] = []
+    for target in targets:
+        player, _ = await Player.objects.aget_or_create(discord_id=target.id)
+        # every player gets their own draw, so a role does not hand the same cards to everyone
+        for ball_id in random.choices(population, weights=weights, k=flags.n):
+            instances.append(
+                BallInstance(
+                    ball_id=ball_id,
+                    player=player,
+                    # rolled per card, so a batch comes out looking like a batch of catches
+                    special=BallSpawnView.get_random_special() if flags.roll_specials else flags.special,
+                    attack_bonus=(
+                        flags.attack_bonus
+                        if flags.attack_bonus is not None
+                        else random.randint(-settings.max_attack_bonus, settings.max_attack_bonus)
+                    ),
+                    health_bonus=(
+                        flags.health_bonus
+                        if flags.health_bonus is not None
+                        else random.randint(-settings.max_health_bonus, settings.max_health_bonus)
+                    ),
+                )
+            )
+    await BallInstance.objects.abulk_create(instances, batch_size=500)
+
+    lines = [
+        f"Gave **{flags.n}** {settings.plural_collectible_name} to "
+        + (targets[0].mention if len(targets) == 1 else f"**{len(targets)}** players")
+        + f" — **{len(instances):,}** cards, {what}."
+    ]
+    lines.append(f"Specials: {_bulk_give_specials(flags)}.")
+    if flags.roll_specials:
+        rolled = Counter(i.special.name for i in instances if i.special)
+        lines.append(
+            "> " + ", ".join(f"{name} ×{count}" for name, count in rolled.most_common(10))
+            if rolled
+            else "> None came up, which is what the odds usually say."
+        )
+    if len(targets) == 1:
+        counts = Counter(instance.ball_id for instance in instances)
+        names = [
+            f"{balls_cache[ball_id].country if ball_id in balls_cache else ball_id}"
+            + (f" ×{count}" if count > 1 else "")
+            for ball_id, count in counts.most_common(20)
+        ]
+        lines.append("> " + ", ".join(names) + (" ..." if len(counts) > 20 else ""))
+    await ctx.send("\n".join(lines)[:2000], ephemeral=True)
+
+    log.info(
+        f"{ctx.author} ({ctx.author.id}) bulk gave {flags.n} {settings.plural_collectible_name} to "
+        f"{len(targets)} player(s) ({len(instances)} cards), {what}, specials: {_bulk_give_specials(flags)}.",
         extra={"webhook": True},
     )
 

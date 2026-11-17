@@ -13,8 +13,10 @@ from django.db.models import Count, Sum
 from django.utils import timezone
 
 from ballsdex.core.game_events import Event, EventContext, bus, command_did_nothing
+from ballsdex.core.utils.buttons import ConfirmChoiceView
 from ballsdex.core.utils.leaderboard import EXTRA_ROWS, LEADERBOARD_SIZE, send_leaderboard
 from ballsdex.core.utils.utils import can_mention, member_role_ids
+from bd_models.enums import BerryPolicy
 from bd_models.models import Player, Trade
 from settings.models import settings
 from settings.utils import format_currency
@@ -145,6 +147,34 @@ class Money(commands.GroupCog):
         if new_player.discord_id in self.bot.blacklist:
             await interaction.followup.send("You cannot donate to a blacklisted user.", ephemeral=True)
             return
+
+        currency = settings.currency_display_plural(self.bot)
+        if new_player.berry_policy == BerryPolicy.ALWAYS_DENY:
+            await interaction.followup.send(f"This player does not accept {currency}.", ephemeral=True)
+            return
+        if new_player.berry_policy == BerryPolicy.FRIENDS_ONLY and not await new_player.is_friend(old_player):
+            await interaction.followup.send(
+                f"This player only accepts {currency} from friends.", ephemeral=True
+            )
+            return
+        if new_player.berry_policy == BerryPolicy.REQUEST_APPROVAL:
+            view = ConfirmChoiceView(
+                interaction,
+                user=user,
+                accept_message=f"Accepted, the {currency} are yours.",
+                cancel_message="Declined.",
+            )
+            await interaction.followup.send(
+                f"{user.mention}, {interaction.user.mention} wants to send you "
+                f"{format_currency(amount, bot=self.bot)}. Do you accept?",
+                view=view,
+                allowed_mentions=await can_mention([new_player]),
+            )
+            await view.wait()
+            if view.value is not True:
+                return
+            # the balance can move while the prompt is open, so it is checked again below
+            await old_player.arefresh_from_db(fields=("money",))
 
         try:
             await sync_to_async(self.perform_donation)(old_player, new_player, amount)

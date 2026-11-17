@@ -63,6 +63,7 @@ impersonations: dict[int, discord.Member] = {}
 DEFAULT_PACKAGES = (
     ("admin", "ballsdex.packages.admin"),
     ("balls", "ballsdex.packages.balls"),
+    ("bounty", "ballsdex.packages.bounty"),
     ("guildconfig", "ballsdex.packages.guildconfig"),
     ("countryballs", "ballsdex.packages.countryballs"),
     ("info", "ballsdex.packages.info"),
@@ -219,6 +220,7 @@ class BallsDexBot(commands.AutoShardedBot):
         disable_message_content: bool = False,
         disable_time_check: bool = False,
         skip_tree_sync: bool = False,
+        enable_members_intent: bool = False,
         gateway_url: str | None = None,
         dev: bool = False,
         **options,
@@ -228,8 +230,15 @@ class BallsDexBot(commands.AutoShardedBot):
         # and accordingly enable automatic spawning in the enabled ones
         # guild_messages: spawning is based on messages sent, content is not necessary
         # emojis_and_stickers: DB holds emoji IDs for the balls which are fetched from 3 servers
+        # members: off unless asked for. It is a privileged intent, so turning it on here without
+        # also ticking it in the developer portal stops the bot from connecting at all. Only the
+        # commands that have to walk through a role's members need it.
         intents = discord.Intents(
-            guilds=True, guild_messages=True, emojis_and_stickers=True, message_content=not disable_message_content
+            guilds=True,
+            guild_messages=True,
+            emojis_and_stickers=True,
+            message_content=not disable_message_content,
+            members=enable_members_intent,
         )
         if disable_message_content:
             log.warning("Message content disabled, this will make spam detection harder")

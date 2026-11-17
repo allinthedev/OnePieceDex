@@ -65,7 +65,7 @@ class BallInstanceGuildTabular(InlinePaginated, NonrelatedInlineMixin, admin.Tab
             "%s:%s_%s_change" % (self.admin_site.name, opts.app_label, opts.model_name), None, (quote(obj.player.pk),)
         )
         # Display a link to the admin page.
-        return format_html(f'<a href="{admin_url}">{obj.player}</a>')
+        return format_html('<a href="{}">{}</a>', admin_url, obj.player)
 
 
 @admin.register(GuildConfig)

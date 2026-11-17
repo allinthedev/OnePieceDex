@@ -103,6 +103,13 @@ class Settings(models.Model):
     currency_symbol_before = models.BooleanField(
         default=False, help_text="If enabled, your currency symbol will be placed before the amount."
     )
+    currency_image = models.ImageField(
+        max_length=200,
+        null=True,
+        blank=True,
+        help_text="A picture of your currency, shown next to rewards that pay it out. The emoji below is what "
+        "appears inline in text; this is for the places with room for a real image.",
+    )
     currency_emoji_id = models.BigIntegerField(
         null=True,
         blank=True,

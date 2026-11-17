@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import discord
 from currency_app.models import BerryTransaction
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.utils import format_dt
 from django.utils import timezone
 from merchant_app.models import (
@@ -17,6 +17,8 @@ from merchant_app.models import (
     merchant_items,
 )
 
+from ballsdex.core.utils import checks
+from ballsdex.core.utils.broadcast import announce_to_spawn_channels
 from ballsdex.core.utils.buttons import ConfirmChoiceView
 from ballsdex.core.utils.menus.old import FieldPageSource, Pages
 from bd_models.models import BallInstance, Player
@@ -41,6 +43,12 @@ class Merchant(commands.GroupCog):
     def __init__(self, bot: "BallsDexBot"):
         self.bot = bot
         self._merchant_settings: MerchantSettings | None = None
+
+    async def cog_load(self):
+        self.weekly_announcements.start()
+
+    def cog_unload(self):
+        self.weekly_announcements.cancel()
 
     rotation = app_commands.Group(name="rotation", description="Merchant rotation commands.")
     global_group = app_commands.Group(name="global", description="Merchant global commands.")
@@ -67,6 +75,103 @@ class Merchant(commands.GroupCog):
             global_shops[shop.pk] = shop
 
         await ctx.message.add_reaction("✅")
+
+    async def _announce_shop(self, shop: GlobalShop, items: list[MerchantItem]) -> tuple[int, int, int]:
+        """
+        Announce one shop everywhere and start its happy hour. Returns `(sent, missed, discount)`.
+
+        The happy hour is counted from the announcement, so the clock starts here rather than
+        when an admin saved the shop.
+        """
+        shop.announced_at = timezone.now()
+        await shop.asave(update_fields=("announced_at",))
+        if cached := global_shops.get(shop.pk):
+            cached.announced_at = shop.announced_at
+        discount = shop.discount_now()
+
+        embed = discord.Embed(
+            title=shop.name,
+            colour=settings.embed_colour,
+            description=shop.announcement_text or f"**{shop.name}** just restocked.",
+        )
+        embed.add_field(
+            name="Have a look",
+            value=f"`/merchant global shop` and pick **{shop.name}**.\n"
+            f"{len(items)} item{'s' if len(items) > 1 else ''} on sale.",
+            inline=False,
+        )
+        if discount:
+            embed.add_field(
+                name="Happy hour",
+                value=f"**{discount}% off everything**, ending "
+                f"{format_dt(shop.happy_hour_ends_at, style='R')}.",  # type: ignore
+                inline=False,
+            )
+        if shop.banner:
+            embed.set_image(url=f"{settings.site_base_url}/media/{shop.banner.name}")
+
+        sent, missed = await announce_to_spawn_channels(self.bot, embed)
+        return sent, missed, discount
+
+    @merchant.command(name="announce")
+    @checks.has_permissions("merchant_app.change_globalshop")
+    async def announce(self, ctx: commands.Context["BallsDexBot"], *, shop_name: str):
+        """
+        Tell every spawn channel a global shop has new stock, and start its happy hour.
+        """
+        shop = await GlobalShop.objects.filter(name__iexact=shop_name.strip()).afirst()
+        if shop is None:
+            names = [name async for name in GlobalShop.objects.values_list("name", flat=True)]
+            await ctx.send(
+                f"No global shop called `{shop_name}`."
+                + (f" There is: {', '.join(f'`{name}`' for name in names)}." if names else " There are none yet.")
+            )
+            return
+
+        items = [item async for item in shop.items.all() if item.enabled]
+        if not items:
+            await ctx.send(f"**{shop.name}** has no item on sale, so there is nothing to announce yet.")
+            return
+
+        sent, missed, discount = await self._announce_shop(shop, items)
+        await ctx.send(
+            f"Announced **{shop.name}** in {sent} spawn channel{'s' if sent != 1 else ''}"
+            + (f", {missed} could not be reached" if missed else "")
+            + (f". Happy hour: {discount}% off for {shop.happy_hour_minutes} minutes." if discount else ".")
+        )
+        log.info(
+            f"{ctx.author} ({ctx.author.id}) announced global shop {shop.name} to {sent} channels "
+            f"({missed} missed), discount={discount}%.",
+            extra={"webhook": True},
+        )
+
+    @tasks.loop(minutes=5)
+    async def weekly_announcements(self):
+        """
+        Announce the shops that are on a weekly schedule, without anyone having to be around.
+
+        Runs every few minutes and leans on `due_for_announcement` to decide: the day and the
+        hour have to match, and a shop announced in the last twelve hours is left alone, so a
+        slot cannot fire twice however often this loop ticks.
+        """
+        now = timezone.now()
+        async for shop in GlobalShop.objects.filter(auto_announce_weekday__isnull=False):
+            if not shop.due_for_announcement(now):
+                continue
+            items = [item async for item in shop.items.all() if item.enabled]
+            if not items:
+                log.warning("merchant: %s was due for its weekly announcement with nothing on sale", shop.name)
+                continue
+            sent, missed, discount = await self._announce_shop(shop, items)
+            log.info(
+                f"merchant: weekly announcement for {shop.name} went out to {sent} channels "
+                f"({missed} missed), discount={discount}%.",
+                extra={"webhook": True},
+            )
+
+    @weekly_announcements.before_loop
+    async def before_weekly_announcements(self):
+        await self.bot.wait_until_ready()
 
     @rotation.command(name="shop")
     async def rotation_shop(self, interaction: discord.Interaction["BallsDexBot"]):
@@ -164,10 +269,16 @@ class Merchant(commands.GroupCog):
             The shop you want to visit
         """
         await interaction.response.defer(thinking=True)
-        entries: list[tuple[str, str]] = [(x.name, self._price_text(x)) async for x in shop.items.all()]
+        discount = shop.discount_now()
+        entries: list[tuple[str, str]] = [(x.name, self._price_text(x, discount)) async for x in shop.items.all()]
         source = FieldPageSource(entries, per_page=3, inline=True)
         source.embed.title = f"{settings.bot_name} {shop.name}"
         source.embed.set_image(url=f"{settings.site_base_url}/media/{shop.banner.name}")
+        if discount:
+            ends_at = shop.happy_hour_ends_at
+            source.embed.description = (
+                f"🔥 **Happy hour: {discount}% off everything**, until {format_dt(ends_at, style='R')}."  # type: ignore
+            )
         pages = Pages(source, interaction=interaction, compact=True)
         await pages.start()
 
@@ -294,8 +405,12 @@ class Merchant(commands.GroupCog):
             if current.lower() in x.name.lower()
         ]
 
-    def _price_text(self, item: MerchantItem) -> str:
-        text = format_currency(item.prize or 0, False, self.bot)
+    def _price_text(self, item: MerchantItem, discount: int = 0) -> str:
+        if discount and item.prize:
+            paid = GlobalShop.discounted(item.prize, discount)
+            text = f"~~{format_currency(item.prize, False, self.bot)}~~ {format_currency(paid, False, self.bot)}"
+        else:
+            text = format_currency(item.prize or 0, False, self.bot)
         if item.stock is not None:
             text += f"\n-# {item.stock_text}"
         return text

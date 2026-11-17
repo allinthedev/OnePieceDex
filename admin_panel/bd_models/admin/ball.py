@@ -4,10 +4,11 @@ from django.contrib import admin
 from django.contrib.admin.utils import quote
 from django.forms import Textarea
 from django.urls import reverse
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.text import capfirst
 
+from .. import treasure_value
 from ..models import Ball, BallGroup, BallInstance, Economy, Regime, TradeObject, transform_media
 
 if TYPE_CHECKING:
@@ -82,10 +83,13 @@ class BallGroupAdmin(admin.ModelAdmin):
 @admin.register(Ball)
 class BallAdmin(admin.ModelAdmin):
     autocomplete_fields = ("regime", "economy")
-    readonly_fields = ("collection_image", "spawn_image")
+    readonly_fields = ("collection_image", "spawn_image", "hotel_value")
     save_on_top = True
     fieldsets = [
-        (None, {"fields": ["country", "health", "attack", "rarity", "emoji_id", "economy", "regime"]}),
+        (
+            None,
+            {"fields": ["country", "health", "attack", "rarity", "hotel_value", "emoji_id", "economy", "regime"]},
+        ),
         (
             "Assets",
             {
@@ -111,7 +115,7 @@ class BallAdmin(admin.ModelAdmin):
         ),
     ]
 
-    list_display = ["country", "pk", "emoji", "rarity", "capacity_name", "health", "attack", "enabled"]
+    list_display = ["country", "pk", "emoji", "rarity", "sale_value", "capacity_name", "health", "attack", "enabled"]
     list_editable = ["enabled", "rarity"]
     list_filter = ["enabled", "tradeable", "regime", "economy", "groups", "created_at"]
     ordering = ["-created_at"]
@@ -124,6 +128,21 @@ class BallAdmin(admin.ModelAdmin):
         return mark_safe(
             f'<img src="https://cdn.discordapp.com/emojis/{obj.emoji_id}.png?size=40" title="ID: {obj.emoji_id}" />'
         )
+
+    @admin.display(description="Hotel value")
+    def sale_value(self, obj: Ball):
+        """What the Hotel pays for it at 0/0 stats, so a list can be read down the column."""
+        return treasure_value.short_label(obj.rarity)
+
+    @admin.display(description="Hotel de Vente")
+    def hotel_value(self, obj: Ball | None):
+        """
+        The same, spelled out — saves giving yourself the treasure and selling it to Buggy
+        just to find out what it is worth before putting it in a shop.
+        """
+        if obj is None:
+            return "Set a rarity and save, and what the Hotel pays for it shows up here."
+        return format_html_join(mark_safe("<br>"), "{}", ((line,) for line in treasure_value.detail_lines(obj.rarity)))
 
     def formfield_for_dbfield(
         self, db_field: "Field[Any, Any]", request: "HttpRequest | None", **kwargs: Any
