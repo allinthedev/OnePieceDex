@@ -6,6 +6,7 @@ of crews — a hunt run as a race between them, a war scored over a season — r
 from here rather than keeping its own idea of who is on which side.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -118,13 +119,51 @@ class CrewWarRule(models.Model):
     """What one kind of deed is worth in this war."""
 
     class Source(models.TextChoices):
+        """
+        Every deed a war can be told to count.
+
+        They are grouped by what they ask of a player, because a war reads better when the
+        points are spread across the groups than when they all sit on one of them: fighting
+        rewards the people who show up to events, the treasure and trading deeds reward the
+        ones who play on their own in between, and the last group rewards simply turning up.
+        """
+
+        # -- fighting
         BATTLE_PLAYED = "battle_played", "Took part in a battle"
         BATTLE_WIN = "battle_win", "Won a battle"
         BOSS_PLAYED = "boss_played", "Took part in a boss fight"
         BOSS_WIN = "boss_win", "Won a boss fight"
+
+        # -- the events the staff run
         BOUNTY_CLAIMED = "bounty_claimed", "Caught a wanted treasure"
         PONEGLYPH_CLAIMED = "poneglyph_claimed", "Claimed a poneglyph"
         HUNT_COMPLETED = "hunt_completed", "Finished a poneglyph hunt"
+
+        # -- treasures
+        CATCH = "catch", "Caught a treasure"
+        CATCH_SPECIAL = "catch_special", "Caught a special treasure"
+        CRAFT = "craft", "Claimed a collector card"
+
+        # -- between players
+        TRADE = "trade", "Completed a trade"
+        GIFT = "gift", "Gave a treasure away"
+        FRIEND = "friend", "Made a friend"
+
+        # -- the Hotel de Vente
+        AUCTION_CREATE = "auction_create", "Listed a treasure at the Hotel"
+        AUCTION_BID = "auction_bid", "Placed a bid"
+        AUCTION_WON = "auction_won", "Won a listing"
+        SELL = "sell", "Sold a treasure to Buggy"
+        SHOP_BUY = "shop_buy", "Bought a treasure from Buggy's shop"
+
+        # -- the shops
+        PACK_BUY = "pack_buy", "Bought a pack"
+        MERCHANT_BUY = "merchant_buy", "Bought from the merchant"
+
+        # -- showing up
+        DAILY_BERRIES = "daily_berries", "Claimed the daily berries"
+        DAILY_PACK = "daily_pack", "Claimed the daily pack"
+        PLAYED = "played", "Played at all that day"
 
     war = models.ForeignKey(CrewWar, on_delete=models.CASCADE, related_name="rules")
     war_id: int
@@ -135,12 +174,30 @@ class CrewWarRule(models.Model):
         help_text="Most points one player can earn from this deed in a day. 0 means no limit — handy on the "
         "deeds a player could repeat all evening.",
     )
+    minimum_value = models.PositiveIntegerField(
+        default=0,
+        help_text="Only count the deed when the berries it moves reach this. It is what stops a crew farming "
+        "a sale or a listing worth one berry, over and over. 0 counts every one, and deeds that move no "
+        "berries ignore it.",
+    )
 
     class Meta:
         managed = True
         db_table = "crewwarrule"
         ordering = ("source",)
         unique_together = (("war", "source"),)
+
+    def clean(self):
+        # "played" is scored off every slash command, so without a cap it would pay a player
+        # for scrolling through their inventory all evening. The cap is what turns it into
+        # "turned up today", which is the only thing it is good for.
+        if self.source == self.Source.PLAYED and not self.daily_cap:
+            raise ValidationError(
+                {
+                    "daily_cap": "Playing is scored off every command, so this one needs a daily cap. "
+                    "Set it to the same number as the points to make it 'turned up today'."
+                }
+            )
 
     def __str__(self) -> str:
         return f"{self.get_source_display()}: {self.points}"

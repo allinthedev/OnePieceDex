@@ -9,7 +9,7 @@ from discord.ext import commands
 from django.db.models import Sum
 
 from bd_models.models import Player
-from crew_app.models import Crew, CrewMembership, CrewWar, CrewWarEntry
+from crew_app.models import Crew, CrewMembership, CrewWar, CrewWarEntry, CrewWarRule
 from crew_app.scoring import standings, top_players
 from settings.models import settings
 
@@ -97,6 +97,28 @@ class CrewCog(commands.GroupCog, group_name="crew"):
                 discord_id = await Player.objects.filter(pk=player_id).values_list("discord_id", flat=True).afirst()
                 names.append(f"{rank + 1}. <@{discord_id}> — **{points}**")
             embed.add_field(name="Top contributors", value="\n".join(names), inline=False)
+
+        # a war scores nothing an admin has not asked it to, so this list is the war's own and
+        # worth showing: without it the only way to learn what pays is to be told in a channel
+        rules = [
+            rule async for rule in CrewWarRule.objects.filter(war=war).exclude(points=0).order_by("-points", "source")
+        ]
+        if rules:
+            kept: list[str] = []
+            for rule in rules:
+                line = f"{rule.get_source_display()} — **{rule.points:+d}**"
+                if rule.daily_cap:
+                    line += f" *(up to {rule.daily_cap} a day)*"
+                if rule.minimum_value:
+                    line += f" *(from {rule.minimum_value:,} berries)*"
+                # an embed field stops at 1024 characters, and with every deed scored the list
+                # reaches it. The smallest earners are the ones worth dropping, which is why
+                # the rules were read best-paying first.
+                if len("\n".join([*kept, line, "…"])) > 1024:
+                    kept.append("…")
+                    break
+                kept.append(line)
+            embed.add_field(name="How to score", value="\n".join(kept), inline=False)
 
         if war.ends_at:
             embed.add_field(name="Ends", value=discord.utils.format_dt(war.ends_at, style="R"), inline=False)

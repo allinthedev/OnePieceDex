@@ -66,7 +66,9 @@ class CrewMembershipAdmin(admin.ModelAdmin):
 class CrewWarRuleInline(admin.TabularInline):
     model = CrewWarRule
     extra = 1
-    fields = ("source", "points", "daily_cap")
+    fields = ("source", "points", "daily_cap", "minimum_value")
+    verbose_name = "scoring rule"
+    verbose_name_plural = "What is worth points"
 
 
 @admin.register(CrewWar)
@@ -81,6 +83,24 @@ class CrewWarAdmin(admin.ModelAdmin):
     save_on_top = True
     inlines = [CrewWarRuleInline]
     readonly_fields = ("standings_preview", "created_at")
+
+    def save_related(self, request, form, formsets, change):
+        # the rules are held for half a minute while the war is scored, so a change made here
+        # would otherwise take that long to show up
+        super().save_related(request, form, formsets, change)
+        self._forget_cached_war()
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        self._forget_cached_war()
+
+    @staticmethod
+    def _forget_cached_war():
+        # imported here rather than at the top: scoring pulls in the bot's event bus, which the
+        # panel has no reason to load on startup
+        from .scoring import invalidate
+
+        invalidate()
     fieldsets = [
         (None, {"fields": ["name", "description", "enabled"]}),
         (
