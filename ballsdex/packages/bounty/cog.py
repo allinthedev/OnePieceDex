@@ -76,7 +76,7 @@ class Bounties(commands.Cog):
             ).aupdate(announced_at=now)
             if not claimed_the_announcement:
                 continue
-            sent, missed = await announce_to_spawn_channels(self.bot, self.poster(bounty))
+            sent, missed = await announce_to_spawn_channels(self.bot, self.poster(bounty), scope=bounty.announce_to)
             log.info(
                 f"Wanted poster for {bounty.cached_ball.country} ({bounty.reward:,}) went out to "
                 f"{sent} channels, {missed} missed.",

@@ -19,6 +19,7 @@ from crew_app.models import Crew
 from django.db import models
 from django.utils import timezone
 
+from bd_models.enums import AnnouncementScope
 from bd_models.models import Ball, BallInstance, Player, Special, balls, specials
 
 
@@ -70,6 +71,14 @@ class Hunt(models.Model):
         help_text="One picture of a stone, reused for every poneglyph in this hunt. This is what lets a hunt "
         "have nine poneglyphs without nine illustrations.",
     )
+    announce_to = models.CharField(
+        max_length=8,
+        choices=AnnouncementScope.choices,
+        default=AnnouncementScope.ALL,
+        help_text="Where this hunt announces itself: a poneglyph surfacing, and a crew finishing the hunt. "
+        "A hunt run for your own server only needs the main server; set it to nowhere and the poneglyphs "
+        "appear with no warning at all.",
+    )
     poneglyph_emoji = models.CharField(
         max_length=64,
         blank=True,
@@ -103,9 +112,9 @@ class Hunt(models.Model):
     )
     announce_completion = models.BooleanField(
         default=True,
-        help_text="Announce in every spawn channel when someone finishes this hunt. On a crew hunt that is "
-        "one announcement per crew; on an individual one it is one per player, so turn it off if that would "
-        "be too much noise.",
+        help_text="Announce it when someone finishes this hunt, wherever the setting above sends it. On a "
+        "crew hunt that is one announcement per crew; on an individual one it is one per player, so turn it "
+        "off if that would be too much noise.",
     )
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
 

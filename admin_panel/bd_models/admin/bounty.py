@@ -36,7 +36,7 @@ class BountyAdmin(admin.ModelAdmin):
             {
                 "description": "The bot posts the poster in every spawn channel once the bounty opens. Clear "
                 "the date below to have it announced again.",
-                "fields": ["announcement_text", "announced_at"],
+                "fields": ["announce_to", "announcement_text", "announced_at"],
             },
         ),
         (

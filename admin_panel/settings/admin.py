@@ -148,7 +148,13 @@ class SettingsAdmin(admin.ModelAdmin):
             "Ownership and administration",
             {
                 "description": "Configure how administrative actions must be handled.",
-                "fields": ("admin_channel_ids", "webhook_logging", "team_owners", "coowners"),
+                "fields": (
+                    "main_server_id",
+                    "admin_channel_ids",
+                    "webhook_logging",
+                    "team_owners",
+                    "coowners",
+                ),
             },
         ),
         (

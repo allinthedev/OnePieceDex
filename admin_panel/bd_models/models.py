@@ -25,6 +25,7 @@ from ballsdex.core.image_generator.image_gen import draw_card
 from settings.models import settings
 
 from .enums import (
+    AnnouncementScope,
     BerryPolicy,
     DonationPolicy,
     FriendPolicy,
@@ -933,6 +934,14 @@ class Bounty(models.Model):
     special_id: int | None
     starts_at = models.DateTimeField(help_text="The bounty is dead before this.")
     ends_at = models.DateTimeField(help_text="And dead again after this, claimed or not.")
+    announce_to = models.CharField(
+        max_length=8,
+        choices=AnnouncementScope.choices,
+        default=AnnouncementScope.ALL,
+        help_text="Where the poster goes up when the bounty opens. One meant for your own players goes on "
+        "the main server only; set it to nowhere and nobody sees it coming — the bounty is collected by "
+        "whoever happens to catch the treasure.",
+    )
     announcement_text = models.CharField(
         max_length=256,
         blank=True,

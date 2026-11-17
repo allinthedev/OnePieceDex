@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING
 
 import discord
 
+from bd_models.enums import AnnouncementScope
 from bd_models.models import GuildConfig
+from settings.models import settings
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot
@@ -24,20 +26,36 @@ CONCURRENCY = 10
 
 
 async def announce_to_spawn_channels(
-    bot: "BallsDexBot", embed: discord.Embed, *, concurrency: int = CONCURRENCY
+    bot: "BallsDexBot",
+    embed: discord.Embed,
+    *,
+    scope: str = AnnouncementScope.ALL,
+    concurrency: int = CONCURRENCY,
 ) -> tuple[int, int]:
     """
-    Post an embed in the spawn channel of every server that has one. Returns `(sent, missed)`.
+    Post an embed in the spawn channels the scope asks for. Returns `(sent, missed)`.
 
     A server whose channel has been deleted, or where the bot is no longer allowed to post, is
     counted as missed. One of those never stops the announcement reaching everybody else.
+
+    Parameters
+    ----------
+    scope: str
+        An `AnnouncementScope`: every spawn channel, the main server's only, or nowhere. The
+        main server is the one named on the settings page; with none named, nothing is sent,
+        because posting everywhere would be a worse guess than posting nowhere.
     """
-    channel_ids = [
-        channel_id
-        async for channel_id in GuildConfig.objects.filter(enabled=True, spawn_channel__isnull=False).values_list(
-            "spawn_channel", flat=True
-        )
-    ]
+    if scope == AnnouncementScope.NONE:
+        return 0, 0
+
+    channels = GuildConfig.objects.filter(enabled=True, spawn_channel__isnull=False)
+    if scope == AnnouncementScope.MAIN:
+        if not settings.main_server_id:
+            log.warning("Announcement limited to the main server, but no main server is set. Nothing was sent.")
+            return 0, 0
+        channels = channels.filter(guild_id=settings.main_server_id)
+
+    channel_ids = [channel_id async for channel_id in channels.values_list("spawn_channel", flat=True)]
     sent = missed = 0
     semaphore = asyncio.Semaphore(concurrency)
 

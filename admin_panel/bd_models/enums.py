@@ -24,6 +24,19 @@ class BerryPolicy(models.IntegerChoices):
     FRIENDS_ONLY = 4
 
 
+class AnnouncementScope(models.TextChoices):
+    """
+    Where something announces itself.
+
+    MAIN needs the main server to be set on the settings page; with no server named there it
+    behaves like NONE, which the admin page says rather than leaving it to be discovered.
+    """
+
+    ALL = "all", "Every spawn channel"
+    MAIN = "main", "The main server only"
+    NONE = "none", "Nowhere, announce nothing"
+
+
 class MentionPolicy(models.IntegerChoices):
     ALLOW = 1
     DENY = 2

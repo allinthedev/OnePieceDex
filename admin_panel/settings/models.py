@@ -266,6 +266,12 @@ class Settings(models.Model):
     privacy_policy = models.URLField(help_text="Link to your privacy policy.", default="")
 
     # admin command control
+    main_server_id = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Your own server. What a wanted poster or a hunt means when it is set to announce on the "
+        "main server only. Leave it empty and those announcements go nowhere.",
+    )
     admin_channel_ids = models.TextField(
         help_text="Semicolon-delimited channel IDs where staff may bypass inventory privacy. Ignored for owners."
         "If empty, then admin commands can be used everywhere.",

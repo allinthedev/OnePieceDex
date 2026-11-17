@@ -43,14 +43,16 @@ class HuntAdmin(admin.ModelAdmin):
             {
                 "description": "Animated GIFs work here and play in Discord. One stone picture is reused for "
                 "every poneglyph, which is the point: a nine-stone hunt needs one illustration, not nine.",
-                "fields": [
-                    "poneglyph_image",
-                    "poneglyph_emoji",
-                    "image",
-                    "completed_image",
-                    "announce_completion",
-                    "banner_preview",
-                ],
+                "fields": ["poneglyph_image", "poneglyph_emoji", "image", "completed_image", "banner_preview"],
+            },
+        ),
+        (
+            "Announcements",
+            {
+                "description": "Where this hunt speaks up, and whether it says anything when someone "
+                "finishes it. A hunt set to announce nowhere still runs: the poneglyphs simply surface "
+                "without warning, and are found by whoever is paying attention.",
+                "fields": ["announce_to", "announce_completion"],
             },
         ),
         (

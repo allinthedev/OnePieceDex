@@ -342,7 +342,7 @@ class HuntCog(commands.Cog):
         if url := media_url(picture):
             embed.set_image(url=url)
 
-        sent, missed = await announce_to_spawn_channels(self.bot, embed)
+        sent, missed = await announce_to_spawn_channels(self.bot, embed, scope=hunt.announce_to)
         log.info(
             f"Hunt {hunt.name} completion announced to {sent} channels, {missed} missed.",
             extra={"webhook": True},
@@ -410,7 +410,7 @@ class HuntCog(commands.Cog):
             embed.add_field(name="Hand it in with", value="`/hunt`", inline=False)
             if url := media_url(stone.hunt.poneglyph_image):
                 embed.set_thumbnail(url=url)
-            sent, missed = await announce_to_spawn_channels(self.bot, embed)
+            sent, missed = await announce_to_spawn_channels(self.bot, embed, scope=stone.hunt.announce_to)
             log.info(
                 f"Poneglyph {stone.name} announced to {sent} channels, {missed} missed.", extra={"webhook": True}
             )
