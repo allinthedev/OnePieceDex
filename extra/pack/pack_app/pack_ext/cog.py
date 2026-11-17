@@ -1,3 +1,4 @@
+import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -18,8 +19,19 @@ from ballsdex.core.game_events import Event, EventContext, bus, command_did_noth
 from ballsdex.core.utils.utils import member_role_ids
 from bd_models.models import Ball, BallInstance, Player
 from settings.models import settings
+from settings.utils import format_currency
 
-from .components import ShopMenuSource, ShopPages
+from .components import SelectBallPackView, ShopMenuSource, ShopPages
+from .opening import (
+    MAX_PACKS_PER_COMMAND,
+    PackError,
+    luck_now,
+    open_packs_for,
+    opening_embed,
+    treasure_card,
+    treasure_embed,
+)
+from .transformers import ItemTransform
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot
@@ -101,6 +113,9 @@ class Pack(commands.GroupCog):
     def __init__(self, bot: "BallsDexBot", pack_settings: PackSettings) -> None:
         self.bot = bot
         self.pack_settings = pack_settings
+        # one lock per player, so spamming /pack open cannot have two openings read the same
+        # balance and the same luck bonus before either of them has written anything back
+        self._open_locks: dict[int, asyncio.Lock] = {}
 
     @commands.group()
     async def pack(self, ctx: commands.Context["BallsDexBot"]):
@@ -252,6 +267,63 @@ class Pack(commands.GroupCog):
         embed.set_image(url="attachment://card.webp")
         await interaction.followup.send(embed=embed, file=file)
 
+    @app_commands.command(name="open")
+    @app_commands.describe(
+        pack="The pack to buy and open", amount="How many of it at once, for the packs that allow more than one"
+    )
+    async def open_pack(
+        self,
+        interaction: discord.Interaction["BallsDexBot"],
+        pack: ItemTransform,
+        amount: app_commands.Range[int, 1, MAX_PACKS_PER_COMMAND] = 1,
+    ):
+        """
+        Buy a pack and open it right away.
+        """
+        player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
+
+        # a pack whose treasure the player picks is opened through the menu rather than rolled,
+        # one pick per pack. Only a pack that draws for itself goes straight through.
+        listed = [item_ball.cached_ball async for item_ball in pack.balls.all()]
+        if listed and pack.cards == 1:
+            if amount > pack.packs_per_command:
+                await interaction.response.send_message(
+                    f"You can only open {pack.packs_per_command} **{pack.name}** at a time."
+                    if pack.packs_per_command > 1
+                    else f"**{pack.name}** can only be opened one at a time.",
+                    ephemeral=True,
+                )
+                return
+            total = (pack.prize or 0) * amount
+            if total and player.money < total:
+                await interaction.response.send_message(
+                    f"You don't have enough {settings.currency_display_plural(self.bot)} to buy "
+                    f"{amount}x **{pack.name}**\n"
+                    f"Your actual balance: {format_currency(player.money, False, self.bot)}",
+                    ephemeral=True,
+                )
+                return
+            paginator = SelectBallPackView(pack, interaction, listed, amount)
+            await paginator.start(content=paginator.prompt, ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        lock = self._open_locks.setdefault(interaction.user.id, asyncio.Lock())
+        async with lock:
+            try:
+                opening = await open_packs_for(self.bot, player, pack, amount, server_id=interaction.guild_id)
+            except PackError as error:
+                command_did_nothing(interaction)
+                await interaction.followup.send(str(error), ephemeral=True)
+                return
+
+        if len(opening.instances) == 1:
+            # a single treasure is still worth drawing, the way the shop has always shown it
+            embed = await treasure_embed(opening, interaction.user)
+            await interaction.followup.send(embed=embed, file=await treasure_card(self.bot, opening.instances[0]))
+            return
+        await interaction.followup.send(embed=opening_embed(self.bot, opening, interaction.user))
+
     @app_commands.command()
     async def shop(self, interaction: discord.Interaction["BallsDexBot"]):
         """
@@ -279,7 +351,10 @@ class Pack(commands.GroupCog):
             await interaction.followup.send(f"{settings.bot_name} doesn't have any packs to buy here.")
             return
 
-        source = ShopMenuSource(packs, self.bot)
+        # the player is read here so the shop can show each pack's luck bonus as it stands for
+        # them, rather than only telling them about it once they have already paid
+        player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
+        source = ShopMenuSource(packs, self.bot, {pack.pk: luck_now(pack, player) for pack in packs})
         pages = ShopPages(source, interaction=interaction, compact=True)
         await pages.start()
 

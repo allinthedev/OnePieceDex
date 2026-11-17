@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import discord
+from crew_app.models import Crew, CrewMembership
 from discord import app_commands
 from discord.ext import commands
 from django.db.models import Q
@@ -47,9 +48,11 @@ class Player(commands.GroupCog):
         Edit your player settings
         """
         player, _ = await PlayerModel.objects.aget_or_create(discord_id=interaction.user.id)
+        crews = [crew async for crew in Crew.objects.filter(enabled=True)]
+        membership = await CrewMembership.objects.filter(player=player).select_related("crew").afirst()
         layout = LayoutView()
         container = SettingsContainer()
-        container.configure(interaction, player)
+        container.configure(interaction, player, crews, membership.crew if membership else None)
         layout.add_item(container)
         await interaction.response.send_message(view=layout, ephemeral=True)
 

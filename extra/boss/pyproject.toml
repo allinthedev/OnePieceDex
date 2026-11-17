@@ -1,0 +1,5 @@
+[project]
+name = "boss"
+version = "1.0.0"
+
+dependencies = []

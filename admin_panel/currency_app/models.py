@@ -2,7 +2,9 @@ from typing import Iterable
 
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q
 
 from bd_models.models import Ball, Player, Special, balls
 
@@ -25,6 +27,13 @@ class CurrencySettings(models.Model):
         default=48,
         help_text="A player must claim /daily again within this many hours of their last claim to keep "
         "their streak going. Past this window, the streak resets to day 1.",
+    )
+    pack_price_margin_percent = models.PositiveIntegerField(
+        default=25,
+        help_text="House margin on the price a pack's page suggests, in percent. The suggestion is what the "
+        "Hotel de Vente says the treasures inside are worth, plus this much — at 0 a pack costs exactly what "
+        "comes out of it, which makes buying and reselling free. It only moves the suggestion: the price a "
+        "pack actually charges is its own, and stays whatever you set it to.",
     )
 
     @classmethod
@@ -95,6 +104,7 @@ class BerryTransaction(models.Model):
 
         # core
         DAILY = "daily", "Daily claim"
+        BOUNTY = "bounty", "Wanted bounty"
         GIVE_SENT = "give_sent", "Gave berries away"
         GIVE_RECEIVED = "give_received", "Received berries"
         SPAWN_CATCH = "spawn_catch", "Caught a berry spawn"
@@ -184,6 +194,52 @@ class Item(models.Model):
     special = models.ForeignKey(
         Special, on_delete=models.SET_NULL, blank=True, null=True, help_text="The special of the item (optional)"
     )
+
+    # What the pack holds and how its dice are loaded. The rolling itself lives in
+    # `pack_ext.rolls`, which has no Django in it so these odds can be checked on their own.
+    # The defaults reproduce the single-treasure pack this model described before they existed,
+    # so every pack already in the shop keeps behaving exactly as it did.
+    cards = models.PositiveIntegerField(
+        default=1,
+        validators=(MinValueValidator(1),),
+        help_text="How many treasures this pack hands over at once.",
+    )
+    packs_per_command = models.PositiveIntegerField(
+        default=1,
+        validators=(MinValueValidator(1),),
+        help_text="How many of these packs a player may open in a single /pack open.",
+    )
+    rarity_flatten = models.FloatField(
+        default=1.0,
+        validators=(MinValueValidator(0),),
+        help_text="Softens the rarity weighting: 1.0 draws exactly like a spawn, above 1 makes rare treasures "
+        "rarer still, below 1 makes them more common. Mind that a LOWER rarity is a RARER treasure, so this "
+        "is an exponent on the spawn weight, not on the scarcity.",
+    )
+    rare_rarity = models.FloatField(
+        blank=True,
+        null=True,
+        help_text="Treasures at this rarity or below count as rare: they are starred in the results, and they are "
+        "what the luck bonus and the guarantee below are about. Leave empty to turn both off.",
+    )
+    luck_ramp = models.FloatField(
+        default=0,
+        validators=(MinValueValidator(0),),
+        help_text="Luck bonus: every pack of this kind that comes out with no rare treasure makes rare ones this "
+        "much likelier in the next one (0.4 = +40% weight), and it resets as soon as one shows up. 0 disables it.",
+    )
+    pity_every = models.PositiveIntegerField(
+        default=0,
+        help_text="After this many packs of this kind in a row without a rare treasure, the next one is guaranteed "
+        "to hold one. 0 disables the guarantee.",
+    )
+    special_chance_factor = models.FloatField(
+        default=1.0,
+        validators=(MinValueValidator(0),),
+        help_text="Multiplies every special's catch chance for treasures out of this pack: 1.0 is the same odds as "
+        "catching, 0.5 is twice as rare, 0 never rolls one. Ignored when a special is forced above.",
+    )
+
     balls: models.QuerySet["ItemBall"]
 
     def save(
@@ -211,6 +267,15 @@ class Item(models.Model):
         managed = True
         db_table = "item"
         ordering = ("section", "position", "prize")
+        constraints = [
+            models.CheckConstraint(condition=Q(cards__gte=1), name="item_cards_gte_1"),
+            models.CheckConstraint(condition=Q(packs_per_command__gte=1), name="item_packs_per_command_gte_1"),
+            models.CheckConstraint(condition=Q(rarity_flatten__gte=0), name="item_rarity_flatten_gte_0"),
+            models.CheckConstraint(condition=Q(luck_ramp__gte=0), name="item_luck_ramp_gte_0"),
+            models.CheckConstraint(
+                condition=Q(special_chance_factor__gte=0), name="item_special_chance_factor_gte_0"
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

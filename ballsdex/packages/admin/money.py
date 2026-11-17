@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 import discord
 from asgiref.sync import sync_to_async
@@ -6,6 +7,7 @@ from currency_app.ledger import aadjust_money_to, reset_all_balances
 from currency_app.models import BerryTransaction
 from discord.ext import commands
 from django.db import connection
+from pack_models.models import PackResource
 
 from ballsdex.core.bot import BallsDexBot
 from ballsdex.core.game_events import Event, EventContext, bus
@@ -199,3 +201,67 @@ async def setdefault(ctx: commands.Context[BallsDexBot], amount: int, force: boo
         await sync_to_async(reset_all_balances)(amount, ctx.author.id)
 
     await ctx.send("New default set.")
+
+
+@money.command(name="resetdaily")
+@checks.has_permissions("bd_models.change_player")
+async def resetdaily(
+    ctx: commands.Context[BallsDexBot],
+    user: discord.User,
+    streak: Literal["replay", "advance", "reset"] = "replay",
+    packs: bool = False,
+):
+    """
+    Clear the daily cooldown of the user provided, letting them claim again right away
+
+    Parameters
+    ----------
+    user: discord.User
+        The user whose daily cooldown you want to clear.
+    streak: Literal["replay", "advance", "reset"]
+        replay: same streak day again. advance: the streak moves on. reset: the streak starts over at day 1.
+    packs: bool
+        Also clear the daily pack cooldown, giving the user a fresh cycle of packs.
+    """
+    player = await Player.objects.aget_or_none(discord_id=user.id)
+    if not player:
+        await ctx.send(f"This user does not have a {settings.bot_name} account.", ephemeral=True)
+        return
+
+    had_cooldown = player.extra_data.pop("berry_daily_cooldown", None) is not None
+    streak_day = player.extra_data.get("daily_streak_day", 0)
+    if streak == "reset":
+        # dropping the last claim also takes the player out of the grace window, so the next claim is day 1
+        player.extra_data.pop("daily_last_claim_at", None)
+        player.extra_data.pop("daily_streak_day", None)
+    elif streak == "replay" and streak_day:
+        # /daily claims the day after the one stored, so step back to land on the day already reached
+        player.extra_data["daily_streak_day"] = streak_day - 1
+    await player.asave(update_fields=("extra_data",))
+
+    if had_cooldown:
+        lines = [f"Cleared the daily cooldown of {user.mention}."]
+    else:
+        lines = [f"{user.mention} was not on a daily cooldown."]
+    if streak == "reset":
+        lines.append("Their streak starts over: the next claim is day 1/7.")
+    elif streak == "replay":
+        lines.append(f"Their next claim lands on day {streak_day or 1}/7 again.")
+    else:
+        lines.append("Their streak advances on the next claim, granting a free day.")
+
+    if packs:
+        resource = await PackResource.objects.filter(player=player).afirst()
+        if resource is None or resource.daily_cooldown is None:
+            lines.append("They had no daily pack cooldown running.")
+        else:
+            # a cleared cooldown with no use left opens a new cycle, which carries the pack streak forward
+            await resource.remove_daily_cooldown()
+            lines.append("Cleared their daily pack cooldown, they get a fresh cycle of packs.")
+
+    await ctx.send("\n".join(lines), ephemeral=True)
+    log.info(
+        f"{ctx.author} ({ctx.author.id}) cleared the daily cooldown of {user} ({user.id}) "
+        f"(streak={streak}, packs={packs})",
+        extra={"webhook": True},
+    )

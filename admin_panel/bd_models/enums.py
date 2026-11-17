@@ -15,6 +15,15 @@ class PrivacyPolicy(models.IntegerChoices):
     FRIENDS = 4
 
 
+class BerryPolicy(models.IntegerChoices):
+    """Who is allowed to send a player currency with the give command."""
+
+    ALWAYS_ACCEPT = 1
+    REQUEST_APPROVAL = 2
+    ALWAYS_DENY = 3
+    FRIENDS_ONLY = 4
+
+
 class MentionPolicy(models.IntegerChoices):
     ALLOW = 1
     DENY = 2

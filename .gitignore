@@ -46,6 +46,7 @@ media
 config.yml
 config/production.py
 config/extra.toml
+config/localtest.py
 docker-compose.override.yml
 admin_panel/admin_panel/settings/production.py
 
@@ -63,4 +64,5 @@ extra/*
 !extra/vote_topgg
 !extra/auction_house
 !extra/frames
+!extra/boss
 .gitmodules

@@ -34,6 +34,7 @@ class CLIFlags(TypedDict):
     disable_message_content: bool
     disable_time_check: bool
     skip_tree_sync: bool
+    enable_members_intent: bool
     debug: bool
     dev: bool
 
@@ -253,6 +254,13 @@ class Command(BaseCommand):
             help="Disable usage of message content intent through the bot",
         )
         parser.add_argument(
+            "--enable-members-intent",
+            action="store_true",
+            help="Request the privileged members intent, which the commands that walk through a role's "
+            "members need. Tick 'Server Members Intent' in the developer portal first, or the bot will "
+            "refuse to connect",
+        )
+        parser.add_argument(
             "--disable-time-check",
             action="store_true",
             help="Disables the 3 seconds delay check on interactions. Use this if you're getting "
@@ -334,6 +342,7 @@ class Command(BaseCommand):
                 disable_message_content=options["disable_message_content"],
                 disable_time_check=options["disable_time_check"],
                 skip_tree_sync=options["skip_tree_sync"],
+                enable_members_intent=options["enable_members_intent"],
             )
 
             loop.run_until_complete(init_sentry())

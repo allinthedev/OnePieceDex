@@ -26,6 +26,7 @@ from discord.utils import format_dt
 from ballsdex.core.discord import Modal, View
 from ballsdex.core.utils.buttons import ConfirmChoiceView
 from bd_models.models import (
+    BerryPolicy,
     Block,
     DonationPolicy,
     FriendPolicy,
@@ -41,6 +42,7 @@ from settings.models import settings
 from .utils import get_items_csv, get_trades_csv
 
 if TYPE_CHECKING:
+    from crew_app.models import Crew
     from django.db.models import QuerySet
 
     from ballsdex.core.bot import BallsDexBot
@@ -214,6 +216,15 @@ class SettingsContainer(Container):
     )
     donation_actions = ActionRow()
 
+    berry_text = TextDisplay(
+        content=f"### {settings.currency_plural.title()}\n"
+        f"-# Who should be able to send you {settings.currency_plural} with the give command"
+    )
+    berry_actions = ActionRow()
+
+    crew_text = TextDisplay(content="### Crew\n-# The crew you play for, in hunts and wars run between crews")
+    crew_actions = ActionRow()
+
     fr_text = TextDisplay(content="### Friend requests\n-# You can open or close all friend requests")
     fr_actions = ActionRow()
 
@@ -240,9 +251,78 @@ class SettingsContainer(Container):
         await interaction.response.send_message("You are not allowed to interact with this!", ephemeral=True)
         return False
 
-    def configure(self, interaction: Interaction, player: Player):
+    def configure(
+        self,
+        interaction: Interaction,
+        player: Player,
+        crews: "list[Crew] | None" = None,
+        current_crew: "Crew | None" = None,
+    ):
         self.player = player
         self.title.accessory = discord.ui.Thumbnail(media=interaction.user.display_avatar.url)
+        self._configure_crew(player, crews or [], current_crew)
+
+        def fill_select(row: ActionRow, setting: str, choices: dict[int, str], placeholder: str):
+            """
+            A policy as a dropdown rather than one button per option.
+
+            Four buttons cost four components, and this view sits close to Discord's limit of
+            40 for the whole thing. A select costs one, and reads better for four options.
+            """
+            current = getattr(player, setting)
+            select: Select = Select(
+                placeholder=placeholder,
+                options=[
+                    discord.SelectOption(label=label, value=str(value), default=value == current)
+                    for value, label in choices.items()
+                ],
+            )
+
+            async def callback(interaction: Interaction):
+                picked = int(select.values[0])
+                setattr(player, setting, picked)
+                await player.asave(update_fields=(setting,))
+                for option in select.options:
+                    option.default = int(option.value) == picked
+                await interaction.response.edit_message(view=self.view)
+
+            select.callback = callback
+            row.clear_items()
+            row.add_item(select)
+
+        fill_select(
+            self.inv_actions,
+            "privacy_policy",
+            {
+                PrivacyPolicy.ALLOW: "Open to everyone",
+                PrivacyPolicy.SAME_SERVER: "Same server only",
+                PrivacyPolicy.FRIENDS: "Friends only",
+                PrivacyPolicy.DENY: "Private",
+            },
+            "Who can see your inventory",
+        )
+        fill_select(
+            self.donation_actions,
+            "donation_policy",
+            {
+                DonationPolicy.ALWAYS_ACCEPT: "Always accept",
+                DonationPolicy.REQUEST_APPROVAL: "Ask me first",
+                DonationPolicy.FRIENDS_ONLY: "Friends only",
+                DonationPolicy.ALWAYS_DENY: "Closed",
+            },
+            f"Who can donate {settings.plural_collectible_name} to you",
+        )
+        fill_select(
+            self.berry_actions,
+            "berry_policy",
+            {
+                BerryPolicy.ALWAYS_ACCEPT: "Always accept",
+                BerryPolicy.REQUEST_APPROVAL: "Ask me first",
+                BerryPolicy.FRIENDS_ONLY: "Friends only",
+                BerryPolicy.ALWAYS_DENY: "Closed",
+            },
+            f"Who can send you {settings.currency_plural}",
+        )
 
         def button_callback(buttons: dict[int, Button], setting: str, value: int):
             async def callback(interaction: Interaction):
@@ -260,26 +340,6 @@ class SettingsContainer(Container):
             return callback
 
         settings_buttons = [
-            Row(
-                self.inv_actions,
-                "privacy_policy",
-                {
-                    PrivacyPolicy.ALLOW: Button(label="Open"),
-                    PrivacyPolicy.DENY: Button(label="Private"),
-                    PrivacyPolicy.FRIENDS: Button(label="Friends only"),
-                    PrivacyPolicy.SAME_SERVER: Button(label="Same server"),
-                },
-            ),
-            Row(
-                self.donation_actions,
-                "donation_policy",
-                {
-                    DonationPolicy.ALWAYS_ACCEPT: Button(label="Always accept"),
-                    DonationPolicy.REQUEST_APPROVAL: Button(label="Needs approval"),
-                    DonationPolicy.FRIENDS_ONLY: Button(label="Friends only"),
-                    DonationPolicy.ALWAYS_DENY: Button(label="Closed"),
-                },
-            ),
             Row(
                 self.fr_actions,
                 "friend_policy",
@@ -306,6 +366,50 @@ class SettingsContainer(Container):
                     item.disabled = True
                     item.style = ButtonStyle.primary
                 row.add_item(item)
+
+    def _configure_crew(self, player: Player, crews: "list[Crew]", current: "Crew | None"):
+        """
+        The crew picker. With no crew set up in the panel the whole section disappears, so a dex
+        that does not use crews never shows a menu with nothing in it.
+        """
+        if not crews:
+            self.remove_item(self.crew_text)
+            self.remove_item(self.crew_actions)
+            return
+
+        standing = f"-# You are flying **{current.label}**" if current else "-# You have not picked one yet"
+        self.crew_text.content = (
+            f"### Crew\n-# The crew you play for, in hunts and wars run between crews\n{standing}"
+        )
+        options = [
+            discord.SelectOption(
+                label=crew.name[:100],
+                value=str(crew.pk),
+                emoji=crew.emoji or None,
+                description=(crew.description[:100] or None),
+                default=current is not None and crew.pk == current.pk,
+            )
+            for crew in crews[:24]
+        ]
+        if current is not None:
+            options.append(discord.SelectOption(label="Leave my crew", value="none", emoji="🚪"))
+        select: Select = Select(placeholder="Pick your crew", options=options)
+
+        async def callback(interaction: Interaction):
+            from crew_app.models import CrewMembership
+
+            if select.values[0] == "none":
+                await CrewMembership.objects.filter(player=player).adelete()
+                picked = None
+            else:
+                picked = next(crew for crew in crews if str(crew.pk) == select.values[0])
+                await CrewMembership.objects.aupdate_or_create(player=player, defaults={"crew": picked})
+            self._configure_crew(player, crews, picked)
+            await interaction.response.edit_message(view=self.view)
+
+        select.callback = callback
+        self.crew_actions.clear_items()
+        self.crew_actions.add_item(select)
 
 
 class RelationContainer(Container):

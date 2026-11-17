@@ -3,6 +3,7 @@ from django.http import HttpRequest
 from django.urls import reverse
 from django.utils.html import format_html
 
+from . import pack_value
 from .models import BerryTransaction, CurrencySettings, DailyBonusRole, DailyBonusServer, Item, ItemBall
 
 
@@ -10,8 +11,9 @@ from .models import BerryTransaction, CurrencySettings, DailyBonusRole, DailyBon
 class ItemAdmin(admin.ModelAdmin):
     autocomplete_fields = ("special",)
     save_on_top = True
+    readonly_fields = ("suggested_price",)
     fieldsets = [
-        (None, {"fields": ["name", "description", "prize"]}),
+        (None, {"fields": ["name", "description", "prize", "suggested_price"]}),
         (
             "Shop display",
             {
@@ -20,14 +22,100 @@ class ItemAdmin(admin.ModelAdmin):
             },
         ),
         ("Configure Reward", {"fields": ["minimum_rarity", "maximum_rarity", "special"]}),
+        (
+            "Pack contents and odds",
+            {
+                "description": "Left alone, a pack hands over a single treasure drawn exactly like a spawn, "
+                "which is how every pack behaved before these settings existed. Raise the treasure count to "
+                "turn it into a real pack, and use the three settings below it to decide how generous it is.",
+                "fields": [
+                    "cards",
+                    "packs_per_command",
+                    "rarity_flatten",
+                    "rare_rarity",
+                    "luck_ramp",
+                    "pity_every",
+                    "special_chance_factor",
+                ],
+            },
+        ),
     ]
-    list_display = ("name", "section", "position", "prize", "minimum_rarity", "maximum_rarity")
-    list_editable = ("section", "position", "prize", "minimum_rarity", "maximum_rarity")
+    list_display = (
+        "name",
+        "section",
+        "position",
+        "prize",
+        "suggested",
+        "cards",
+        "minimum_rarity",
+        "maximum_rarity",
+    )
+    list_editable = ("section", "position", "prize", "cards", "minimum_rarity", "maximum_rarity")
     list_filter = ("section", "created_at", "special")
     ordering = ["section", "position", "prize"]
     list_per_page = 100
 
     search_fields = ("name",)
+
+    def get_queryset(self, request: HttpRequest):
+        # the suggested price reads each pack's treasure list, so fetch them with the page
+        # rather than one query per row
+        return super().get_queryset(request).prefetch_related("balls__ball")
+
+    @admin.display(description="Suggested")
+    def suggested(self, obj: Item):
+        """
+        The suggested price next to the one being charged, so a list can be read down the
+        column and a mispriced pack spotted without opening it.
+        """
+        value = pack_value.value_of(obj)
+        if value is None:
+            return "—"
+        if not obj.prize:
+            return format_html("{} <span style='color: gray'>(free)</span>", f"{value.recommended:,}")
+        gap = round((obj.prize - value.recommended) / value.recommended * 100)
+        if abs(gap) <= 10:
+            return format_html("{} <span style='color: green'>✓</span>", f"{value.recommended:,}")
+        colour = "crimson" if gap < 0 else "darkorange"
+        return format_html(
+            "{} <span style='color: {}'>({}{}%)</span>", f"{value.recommended:,}", colour, "+" if gap > 0 else "", gap
+        )
+
+    @admin.display(description="Suggested price")
+    def suggested_price(self, obj: Item | None):
+        """
+        What the Hotel de Vente says this pack's contents are worth, and the price that follows.
+
+        Only ever a suggestion: the price charged is the editable one just above. The margin it
+        adds lives on the currency settings page.
+        """
+        if obj is None or obj.pk is None:
+            return (
+                "Save the pack and its suggested price appears here, worked out from the treasures it "
+                "can hand out. Nothing is charged until you set a price yourself."
+            )
+        value = pack_value.value_of(obj)
+        if value is None:
+            return "No suggestion: either the Hotel de Vente is not installed, or this pack has nothing to give."
+
+        if not obj.prize:
+            verdict = "This pack is free."
+        else:
+            gap = round((obj.prize - value.recommended) / value.recommended * 100)
+            if abs(gap) <= 10:
+                verdict = f"Its price of {obj.prize:,} is in line with that."
+            else:
+                verdict = f"Its price of {obj.prize:,} is {abs(gap)}% {'above' if gap > 0 else 'below'} it."
+        return format_html(
+            "<strong>{}</strong> berries<br>"
+            "{} of treasures on average, plus the {}% house margin.<br>"
+            "{} of that could be sold straight back to the Hotel.<br>{}",
+            f"{value.recommended:,}",
+            f"{value.contents:,}",
+            value.margin_percent,
+            f"{value.liquid:,}",
+            verdict,
+        )
 
 
 @admin.register(ItemBall)
@@ -61,6 +149,14 @@ class CurrencySettingsAdmin(admin.ModelAdmin):
                     "day7_reward",
                     "streak_grace_hours",
                 ]
+            },
+        ),
+        (
+            "Packs",
+            {
+                "description": "Only affects the price a pack's own page suggests. What a pack charges is set "
+                "on the pack itself.",
+                "fields": ["pack_price_margin_percent"],
             },
         ),
     ]
