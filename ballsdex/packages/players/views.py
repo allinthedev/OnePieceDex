@@ -25,6 +25,7 @@ from discord.utils import format_dt
 
 from ballsdex.core.discord import Modal, View
 from ballsdex.core.utils.buttons import ConfirmChoiceView
+from ballsdex.core.utils.emojis import usable_emoji
 from bd_models.models import (
     BerryPolicy,
     Block,
@@ -242,6 +243,7 @@ class SettingsContainer(Container):
     data_actions = DataActionRow()
 
     player: Player
+    bot: "BallsDexBot"
 
     async def interaction_check(self, interaction: Interaction) -> bool:
         if not await interaction.client.blacklist_check(interaction):
@@ -259,6 +261,7 @@ class SettingsContainer(Container):
         current_crew: "Crew | None" = None,
     ):
         self.player = player
+        self.bot = interaction.client
         self.title.accessory = discord.ui.Thumbnail(media=interaction.user.display_avatar.url)
         self._configure_crew(player, crews or [], current_crew)
 
@@ -385,7 +388,7 @@ class SettingsContainer(Container):
             discord.SelectOption(
                 label=crew.name[:100],
                 value=str(crew.pk),
-                emoji=crew.emoji or None,
+                emoji=usable_emoji(self.bot, crew.emoji),
                 description=(crew.description[:100] or None),
                 default=current is not None and crew.pk == current.pk,
             )

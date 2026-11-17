@@ -71,7 +71,7 @@ class Hunt(models.Model):
         "have nine poneglyphs without nine illustrations.",
     )
     poneglyph_emoji = models.CharField(
-        max_length=32,
+        max_length=64,
         blank=True,
         default="🗿",
         help_text="Shown inline when counting stones held, e.g. '🗿 x4'.",

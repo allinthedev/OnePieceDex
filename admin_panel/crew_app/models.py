@@ -16,10 +16,12 @@ class Crew(models.Model):
     name = models.CharField(max_length=48, unique=True, help_text="Shown to players, e.g. 'Straw Hat Pirates'.")
     description = models.TextField(blank=True, default="", help_text="A line or two about what this crew is.")
     emoji = models.CharField(
-        max_length=32,
+        max_length=64,
         blank=True,
         default="",
-        help_text="Shown next to the name. A unicode character, or a Discord emoji as <:name:id>.",
+        help_text="Shown next to the name. A unicode character, or a Discord emoji copied whole, "
+        "as <:name:id> — right-click it and Copy, or type a backslash before it and send it. "
+        "An emoji this bot cannot reach is left out rather than shown broken.",
     )
     image = models.ImageField(
         max_length=200, null=True, blank=True, help_text="The crew's flag or art. A GIF works here too."
