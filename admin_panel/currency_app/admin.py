@@ -40,13 +40,46 @@ class ItemAdmin(admin.ModelAdmin):
             },
         ),
     ]
-    list_display = ("name", "section", "position", "prize", "cards", "minimum_rarity", "maximum_rarity")
+    list_display = (
+        "name",
+        "section",
+        "position",
+        "prize",
+        "suggested",
+        "cards",
+        "minimum_rarity",
+        "maximum_rarity",
+    )
     list_editable = ("section", "position", "prize", "cards", "minimum_rarity", "maximum_rarity")
     list_filter = ("section", "created_at", "special")
     ordering = ["section", "position", "prize"]
     list_per_page = 100
 
     search_fields = ("name",)
+
+    def get_queryset(self, request: HttpRequest):
+        # the suggested price reads each pack's treasure list, so fetch them with the page
+        # rather than one query per row
+        return super().get_queryset(request).prefetch_related("balls__ball")
+
+    @admin.display(description="Suggested")
+    def suggested(self, obj: Item):
+        """
+        The suggested price next to the one being charged, so a list can be read down the
+        column and a mispriced pack spotted without opening it.
+        """
+        value = pack_value.value_of(obj)
+        if value is None:
+            return "—"
+        if not obj.prize:
+            return format_html("{} <span style='color: gray'>(free)</span>", f"{value.recommended:,}")
+        gap = round((obj.prize - value.recommended) / value.recommended * 100)
+        if abs(gap) <= 10:
+            return format_html("{} <span style='color: green'>✓</span>", f"{value.recommended:,}")
+        colour = "crimson" if gap < 0 else "darkorange"
+        return format_html(
+            "{} <span style='color: {}'>({}{}%)</span>", f"{value.recommended:,}", colour, "+" if gap > 0 else "", gap
+        )
 
     @admin.display(description="Suggested price")
     def suggested_price(self, obj: Item | None):
@@ -57,7 +90,10 @@ class ItemAdmin(admin.ModelAdmin):
         adds lives on the currency settings page.
         """
         if obj is None or obj.pk is None:
-            return "Save the pack, and its suggested price appears here."
+            return (
+                "Save the pack and its suggested price appears here, worked out from the treasures it "
+                "can hand out. Nothing is charged until you set a price yourself."
+            )
         value = pack_value.value_of(obj)
         if value is None:
             return "No suggestion: either the Hotel de Vente is not installed, or this pack has nothing to give."

@@ -20,6 +20,7 @@ import itertools
 from dataclasses import dataclass
 from functools import lru_cache
 
+from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 
@@ -50,20 +51,53 @@ class PackValue:
     margin_percent: int
 
 
+# a page of packs values every row with the same settings, so they are read once and held
+# briefly rather than queried per pack. Short-lived: an admin changing them wants to see it.
+_CACHE_SECONDS = 60
+
+
 def _auction():
-    """The Hotel's pricing module, settings and modifier tables, or None if it is not installed."""
-    try:
-        from auction_house_app import pricing
-        from auction_house_app.models import AuctionSettings, SpecialPriceModifier, StatBonusModifier
-    except ImportError:
-        return None
-    auction_settings = AuctionSettings.load()
-    return (
-        pricing,
-        auction_settings,
-        {row.special_id: row.percent for row in SpecialPriceModifier.objects.all()},
-        {row.value: row.percent for row in StatBonusModifier.objects.all()},
+    """
+    `(min_price, max_price, special modifiers, stat modifiers)` of the Hotel, or None when it
+    is not installed. Cached, because none of it changes between two rows of the same page.
+    """
+
+    def load():
+        try:
+            from auction_house_app.models import AuctionSettings, SpecialPriceModifier, StatBonusModifier
+        except ImportError:
+            return ()
+        auction_settings = AuctionSettings.load()
+        return (
+            auction_settings.min_price,
+            auction_settings.max_price,
+            dict(SpecialPriceModifier.objects.values_list("special_id", "percent")),
+            dict(StatBonusModifier.objects.values_list("value", "percent")),
+        )
+
+    return cache.get_or_set("pack_value_auction", load, timeout=_CACHE_SECONDS) or None
+
+
+def _margin() -> int:
+    """The house margin added to a pack's contents, in percent."""
+    return cache.get_or_set(
+        "pack_value_margin", lambda: CurrencySettings.load().pack_price_margin_percent, timeout=_CACHE_SECONDS
     )
+
+
+def _active_specials() -> list[tuple[int, float]]:
+    """The specials that may ride on a treasure right now, with their catch chance."""
+
+    def load():
+        now = timezone.now()
+        return list(
+            Special.objects.filter(
+                Q(start_date__isnull=True) | Q(start_date__lte=now),
+                Q(end_date__isnull=True) | Q(end_date__gte=now),
+            ).values_list("pk", "rarity")
+        )
+
+    return cache.get_or_set("pack_value_specials", load, timeout=_CACHE_SECONDS)
 
 
 @lru_cache(maxsize=4)
@@ -117,10 +151,7 @@ def _special_multiplier(pack: Item, special_modifiers: dict[int, int]) -> tuple[
     if pack.special_id:
         return 1 + special_modifiers.get(pack.special_id, 0) / 100, 0.0
 
-    now = timezone.now()
-    active = Special.objects.filter(
-        Q(start_date__isnull=True) | Q(start_date__lte=now), Q(end_date__isnull=True) | Q(end_date__gte=now)
-    ).values_list("pk", "rarity")
+    active = _active_specials()
     factor = max(pack.special_chance_factor, 0.0)
     chance = 0.0
     percent = 0.0
@@ -202,25 +233,26 @@ def value_of(pack: Item) -> PackValue | None:
     auction = _auction()
     if auction is None or pack.pk is None:
         return None
-    pricing, auction_settings, special_modifiers, stat_modifiers = auction
+    min_price, max_price, special_modifiers, stat_modifiers = auction
 
     pool = _pool(pack)
     if not pool:
         return None
 
     stat_law = _stat_law(settings.max_attack_bonus, settings.max_health_bonus, tuple(sorted(stat_modifiers.items())))
-    minimum = auction_settings.min_price
     values = {}
     for ball_id, rarity in pool:
         # a treasure the Hotel's curve does not reach is worth its floor and no more: it can
         # still come out of the pack, so leaving it out would understate what the pack holds
-        base = treasure_value.base_price(rarity, auction_settings.min_price, auction_settings.max_price) or minimum
-        values[ball_id] = sum(share * max(minimum, round(base * (1 + percent / 100))) for percent, share in stat_law)
+        base = treasure_value.base_price(rarity, min_price, max_price) or min_price
+        values[ball_id] = sum(
+            share * max(min_price, round(base * (1 + percent / 100))) for percent, share in stat_law
+        )
 
     treasures = _expected_treasures(pack, pool, values)
     multiplier, sellable = _special_multiplier(pack, special_modifiers)
     contents = treasures * multiplier
-    margin = CurrencySettings.load().pack_price_margin_percent
+    margin = _margin()
     return PackValue(
         contents=round(contents),
         liquid=round(treasures * sellable),
