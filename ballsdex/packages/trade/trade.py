@@ -445,6 +445,9 @@ class TradeInstance(LayoutView):
         self.confirmation_lock = asyncio.Lock()
         self.edit_lock = asyncio.Lock()
         self.next_edit_interaction: Interaction | None = None
+        # whether the message on screen is out of date. Kept apart from `next_edit_interaction`
+        # because a refresh can be asked for without an interaction to answer it with
+        self.pending_refresh: bool = False
         self.confirmation_phase_start: datetime | None = None
 
         # APM correlation: every span emitted during this trade is tagged with this id,
@@ -624,6 +627,12 @@ class TradeInstance(LayoutView):
         <-- R1 finished
         --> HTTP call for R3 is made
         In this example, request R2 has been discarded since we have received another edit request before R1 finished.
+
+        What is queued is "the message is out of date", not "an interaction is waiting". A refresh
+        asked for without an interaction of its own — a slash command, the bulk selector of
+        `/trade add` — used to be dropped outright whenever an edit was already in flight, and
+        the proposal on screen then silently stopped matching the database: the treasure was
+        added and locked, but the player only saw their proposal without it.
         """
 
         async def refresh():
@@ -638,19 +647,15 @@ class TradeInstance(LayoutView):
                 self.buttons.add_item(self.clear_button)
             self.buttons.add_item(self.cancel_button)
 
+        self.pending_refresh = True
         if interaction is not None:
             self.next_edit_interaction = interaction
         if self.edit_lock.locked():
+            # whoever holds the lock will see the flag above and go round again
             return
         async with self.edit_lock:
-            if self.next_edit_interaction is None:
-                # this is a situation where we need to edit the message but without an interaction that owns it
-                # (when using slash commands instead of buttons), so we fall back on a different endpoint
-                await asyncio.sleep(0.5)
-                await refresh()
-                await self.message.edit(view=self)
-                return
-            while self.next_edit_interaction is not None:
+            while self.pending_refresh:
+                self.pending_refresh = False
                 inter = self.next_edit_interaction
                 self.next_edit_interaction = None
                 await asyncio.sleep(0.5)
@@ -659,7 +664,12 @@ class TradeInstance(LayoutView):
                     for children in self.walk_children():
                         if hasattr(children, "disabled"):
                             children.disabled = True  # type: ignore
-                await inter.edit_original_response(view=self)
+                if inter is not None:
+                    await inter.edit_original_response(view=self)
+                else:
+                    # nothing owns the message, so the webhook endpoint is out and it has to be
+                    # edited directly
+                    await self.message.edit(view=self)
                 if self.is_finished():
                     break
 
