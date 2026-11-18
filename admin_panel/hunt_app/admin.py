@@ -12,7 +12,16 @@ from .models import Hunt, HuntCompletion, Poneglyph, PoneglyphClaim, PoneglyphRe
 class PoneglyphInline(admin.TabularInline):
     model = Poneglyph
     extra = 1
-    fields = ("position", "name", "hint", "opens_at", "draw_count", "draw_min_rarity", "draw_max_rarity")
+    fields = (
+        "position",
+        "name",
+        "hint",
+        "opens_at",
+        "announce_to",
+        "draw_count",
+        "draw_min_rarity",
+        "draw_max_rarity",
+    )
     ordering = ("position", "pk")
     show_change_link = True
 
@@ -106,8 +115,9 @@ class PoneglyphAdmin(admin.ModelAdmin):
             "Opening",
             {
                 "description": "Leave the opening date empty to open with the hunt. The announcement date is "
-                "written by the bot; clear it to have the stone announced again.",
-                "fields": ["opens_at", "announced_at"],
+                "written by the bot; clear it to have the stone announced again. Left on <b>Follow the hunt</b>, "
+                "this stone is announced wherever the hunt says.",
+                "fields": ["opens_at", "announce_to", "announced_at"],
             },
         ),
         (

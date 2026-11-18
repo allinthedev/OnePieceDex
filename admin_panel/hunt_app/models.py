@@ -177,6 +177,15 @@ class Poneglyph(models.Model):
         blank=True,
         help_text="When the bot announced this stone's treasures. Clear it to have it announced again.",
     )
+    announce_to = models.CharField(
+        max_length=8,
+        blank=True,
+        default="",
+        choices=[("", "Follow the hunt")] + AnnouncementScope.choices,
+        help_text="Where this stone announces itself, when you want it to differ from the rest of the hunt. "
+        "One stone set to nowhere surfaces in silence while the others are announced, which is how a hunt "
+        "hides its last poneglyph.",
+    )
 
     draw_count = models.PositiveIntegerField(
         default=3, help_text="How many treasures the 'Draw the treasures' action puts in the set."
@@ -193,6 +202,11 @@ class Poneglyph(models.Model):
     def is_open(self, at: datetime | None = None) -> bool:
         """Whether this stone is visible yet, assuming its hunt is live."""
         return self.opens_at is None or self.opens_at <= (at or timezone.now())
+
+    @property
+    def announcement_scope(self) -> str:
+        """Where this stone is announced: its own choice, or the hunt's when it has made none."""
+        return self.announce_to or self.hunt.announce_to
 
     class Meta:
         managed = True
