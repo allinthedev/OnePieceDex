@@ -10,7 +10,7 @@ import logging
 from datetime import timedelta
 
 from django.core.cache import cache
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from ballsdex.core.game_events import Event, EventContext
@@ -44,6 +44,7 @@ EVENT_SOURCES = {
     Event.MERCHANT_BUY: Source.MERCHANT_BUY,
     Event.CURRENCY_STREAK: Source.DAILY_BERRIES,
     Event.PACK_STREAK: Source.DAILY_PACK,
+    Event.PACK_WEEKLY: Source.WEEKLY_PACK,
     Event.ACTIVITY: Source.PLAYED,
     # a command another system has asked about is dispatched as COMMAND and never as
     # ACTIVITY, so both have to map here or 'played' would miss the busiest commands
@@ -61,14 +62,24 @@ def invalidate():
     cache.delete(_CACHE_KEY)
 
 
-async def live_war() -> "tuple[CrewWar, dict[str, CrewWarRule]] | None":
-    """The war being scored right now and its rules by source, or None when none is running."""
+async def live_war() -> "tuple[CrewWar, dict[str, list[CrewWarRule]]] | None":
+    """
+    The war being scored right now and its rules by source, or None when none is running.
+
+    A source can hold several rules: one naming nothing, and one per treasure, special or
+    collector named. They are kept most-specific first, which is all `matching_rule` needs to
+    pick the right one.
+    """
     cached = cache.get(_CACHE_KEY)
     if cached is None:
         war = await CrewWar.objects.filter(enabled=True).afirst()
-        rules = {}
+        rules: dict[str, list[CrewWarRule]] = {}
         if war is not None:
-            rules = {rule.source: rule async for rule in CrewWarRule.objects.filter(war=war)}
+            query = CrewWarRule.objects.filter(war=war).select_related("ball", "special", "collector", "tier_level")
+            async for rule in query:
+                rules.setdefault(rule.source, []).append(rule)
+            for found in rules.values():
+                found.sort(key=lambda rule: (-rule.named, -rule.points))
         cached = (war, rules)
         cache.set(_CACHE_KEY, cached, _CACHE_SECONDS)
     war, rules = cached
@@ -90,6 +101,22 @@ def berries_moved(context: EventContext | None) -> int:
     if context is None:
         return 0
     return max(context.price, abs(context.amount), context.received_currency)
+
+
+def matching_rule(
+    rules: "dict[str, list[CrewWarRule]]", source: str, context: EventContext | None
+) -> "CrewWarRule | None":
+    """
+    The one rule that pays for this deed, or None when the war does not pay for it.
+
+    The rules of a source are sorted most-specific first, so the first one that matches is the
+    one that names the most, and only it scores. A war saying "a catch is worth 1" and "a catch
+    of Luffy is worth 50" therefore pays 50 for a Luffy, not 51.
+    """
+    for rule in rules.get(source, ()):
+        if rule.points and rule.matches(context):
+            return rule
+    return None
 
 
 def sources_for(event: Event, context: EventContext) -> tuple[str, ...]:
@@ -122,8 +149,8 @@ async def score(player_id: int, source: str, *, context: EventContext | None = N
     if live is None:
         return 0
     war, rules = live
-    rule = rules.get(source)
-    if rule is None or not rule.points:
+    rule = matching_rule(rules, source, context)
+    if rule is None:
         return 0
     if rule.minimum_value and berries_moved(context) < rule.minimum_value:
         return 0
@@ -131,19 +158,38 @@ async def score(player_id: int, source: str, *, context: EventContext | None = N
     if membership is None:
         return 0
 
-    if rule.daily_cap:
-        since = timezone.now() - timedelta(days=1)
-        taken = await CrewWarEntry.objects.filter(
-            war=war, player_id=player_id, source=source, created_at__gte=since
-        ).aaggregate(total=Sum("points"))
-        if (taken["total"] or 0) >= rule.daily_cap:
-            return 0
+    if rule.daily_cap and await taken_today(war, player_id, rule) >= rule.daily_cap:
+        return 0
 
     await CrewWarEntry.objects.acreate(
-        war=war, crew_id=membership.crew_id, player_id=player_id, source=source, points=rule.points
+        war=war,
+        crew_id=membership.crew_id,
+        player_id=player_id,
+        source=source,
+        rule=rule,
+        points=rule.points,
     )
     log.debug("crew war: %s scored %s for %s", player_id, rule.points, source)
     return rule.points
+
+
+async def taken_today(war: CrewWar, player_id: int, rule: CrewWarRule) -> int:
+    """
+    What this player has already taken from this rule in the last day, for the daily cap.
+
+    Counted per rule rather than per source, so a rule naming one treasure gets its own
+    allowance instead of eating the generic one's.
+    """
+    since = timezone.now() - timedelta(days=1)
+    rows = CrewWarEntry.objects.filter(war=war, player_id=player_id, created_at__gte=since)
+    if rule.is_targeted:
+        rows = rows.filter(rule=rule)
+    else:
+        # deeds scored before rules could name a treasure carry their source and no rule, and
+        # they are the generic rule's own history
+        rows = rows.filter(Q(rule=rule) | Q(rule__isnull=True, source=rule.source))
+    taken = await rows.aaggregate(total=Sum("points"))
+    return taken["total"] or 0
 
 
 async def score_quietly(player_id: int, source: str) -> int:
@@ -190,3 +236,73 @@ async def top_players(war: CrewWar, limit: int = 10) -> list[tuple[int, int]]:
         .order_by("-total", "player_id")[:limit]
     )
     return [(row["player_id"], row["total"]) async for row in rows]
+
+
+def _entries(war: CrewWar, crew_id: int | None = None):
+    """
+    The deeds counted for a table.
+
+    A crew is filtered on the deed's own crew, not on who the player flies with now: points
+    brought to a crew stay that crew's, which is the only reading that makes switching sides
+    anything other than a way to move a score around.
+    """
+    rows = CrewWarEntry.objects.filter(war=war)
+    return rows.filter(crew_id=crew_id) if crew_id is not None else rows
+
+
+async def discord_ranking(war: CrewWar, *, crew_id: int | None = None, limit: int = 0) -> list[tuple[int, int]]:
+    """`(discord id, points)`, best first — the shape the shared leaderboard takes."""
+    rows = (
+        _entries(war, crew_id)
+        .values("player__discord_id")
+        .annotate(total=Sum("points"))
+        .order_by("-total", "player__discord_id")
+    )
+    if limit:
+        rows = rows[:limit]
+    return [(row["player__discord_id"], row["total"]) async for row in rows]
+
+
+async def player_points(war: CrewWar, player_id: int) -> int:
+    """What one player has brought to this war, across every crew they have flown for."""
+    total = await _entries(war).filter(player_id=player_id).aaggregate(total=Sum("points"))
+    return total["total"] or 0
+
+
+async def place_of(war: CrewWar, points: int, *, crew_id: int | None = None) -> int:
+    """
+    Where a score sits in a table: one more than the number of players above it.
+
+    Ties therefore share a place, which is what a player expects of a leaderboard — two players
+    on 300 points are both second, and nobody is arbitrarily third.
+    """
+    above = _entries(war, crew_id).values("player_id").annotate(total=Sum("points")).filter(total__gt=points)
+    return await above.acount() + 1
+
+
+async def players_scored(war: CrewWar, *, crew_id: int | None = None) -> int:
+    """How many players have scored at all, for "12th of 60"."""
+    return await _entries(war, crew_id).values("player_id").distinct().acount()
+
+
+async def last_gain(war: CrewWar, player_id: int) -> CrewWarEntry | None:
+    """The most recent deed this player was paid for, loaded ready to be named."""
+    return (
+        await _entries(war)
+        .filter(player_id=player_id)
+        .select_related("rule", "rule__ball", "rule__special", "rule__collector", "rule__tier_level")
+        .order_by("-created_at")
+        .afirst()
+    )
+
+
+def name_of(entry: CrewWarEntry) -> str:
+    """
+    What a scored deed was, in words.
+
+    Reads the rule only when it was already loaded — `last_gain` brings it along — so this never
+    turns into a query from async code. Deeds scored before rules could name a treasure carry no
+    rule at all, and there the source stands in.
+    """
+    rule = entry._state.fields_cache.get("rule")
+    return rule.label if rule is not None else entry.get_source_display()

@@ -98,6 +98,7 @@ class Event(StrEnum):
     # -- shops and crafting
     PACK_BUY = "pack_buy"  # a player bought a pack
     PACK_STREAK = "pack_streak"  # a player claimed their daily pack, carrying the streak they are on
+    PACK_WEEKLY = "pack_weekly"  # a player claimed their weekly pack
     MERCHANT_BUY = "merchant_buy"  # a player bought an item from the merchant
     SHOP_BUY = "shop_buy"  # a player bought a treasure from Buggy's shop
     SELL = "sell"  # a player sold a treasure to Buggy

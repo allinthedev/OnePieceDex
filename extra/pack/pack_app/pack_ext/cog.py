@@ -266,6 +266,14 @@ class Pack(commands.GroupCog):
         file = discord.File(buffer, "card.webp")
         embed.set_image(url="attachment://card.webp")
         await interaction.followup.send(embed=embed, file=file)
+        # the weekly has no streak to carry, so this event only ever says "they turned up this
+        # week" — which is the one thing a crew war or a quest wants to pay for
+        await bus.dispatch(
+            player,
+            Event.PACK_WEEKLY,
+            context=EventContext(server_id=interaction.guild_id),
+            channel_id=interaction.channel_id,
+        )
 
     @app_commands.command(name="open")
     @app_commands.describe(
