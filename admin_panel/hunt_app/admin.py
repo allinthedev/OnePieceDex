@@ -17,6 +17,7 @@ class PoneglyphInline(admin.TabularInline):
         "name",
         "hint",
         "opens_at",
+        "closes_at",
         "announce_to",
         "draw_count",
         "draw_min_rarity",
@@ -112,12 +113,14 @@ class PoneglyphAdmin(admin.ModelAdmin):
     fieldsets = [
         (None, {"fields": ["hunt", "name", "hint", "position"]}),
         (
-            "Opening",
+            "Opening and closing",
             {
-                "description": "Leave the opening date empty to open with the hunt. The announcement date is "
-                "written by the bot; clear it to have the stone announced again. Left on <b>Follow the hunt</b>, "
-                "this stone is announced wherever the hunt says.",
-                "fields": ["opens_at", "announce_to", "announced_at"],
+                "description": "Leave the opening date empty to open with the hunt, and the closing date empty "
+                "to stay claimable as long as the hunt runs. A closed stone is still listed in <code>/hunt</code>, "
+                "marked as closed, so a latecomer sees what they missed. The announcement date is written by the "
+                "bot; clear it to have the stone announced again. Left on <b>Follow the hunt</b>, this stone is "
+                "announced wherever the hunt says.",
+                "fields": ["opens_at", "closes_at", "announce_to", "announced_at"],
             },
         ),
         (
@@ -129,7 +132,7 @@ class PoneglyphAdmin(admin.ModelAdmin):
             },
         ),
     ]
-    list_display = ("name", "hunt", "position", "requirement_count", "opens_at", "announced_at")
+    list_display = ("name", "hunt", "position", "requirement_count", "opens_at", "closes_at", "announced_at")
     list_filter = ("hunt",)
     search_fields = ("name", "hint")
     list_select_related = ("hunt",)

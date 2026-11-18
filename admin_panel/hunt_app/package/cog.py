@@ -19,6 +19,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels
+from ballsdex.core.utils.buttons import ConfirmChoiceView
 from bd_models.models import BallInstance, Player
 from hunt_app.models import Hunt, HuntCompletion, Poneglyph, PoneglyphClaim
 from settings.models import settings
@@ -31,6 +32,32 @@ log = logging.getLogger("ballsdex.packages.hunt")
 
 HELD = "✅"
 MISSING = "⬜"
+# a stone that has not surfaced yet, and one whose window has passed. Both are listed rather
+# than hidden: a hunt reads as a calendar that way, and a latecomer can see what they missed
+LOCKED = "🔒"
+CLOSED = "⌛"
+
+
+def stone_icon(stone: Poneglyph, held: bool, at=None) -> str:
+    """The single character standing for what this stone is doing right now."""
+    if held:
+        return HELD
+    if not stone.has_surfaced(at):
+        return LOCKED
+    if stone.has_closed(at):
+        return CLOSED
+    return MISSING
+
+
+def stone_note(stone: Poneglyph, at=None) -> str:
+    """What to say beside a stone's name in an embed: when it opens, or when it closed."""
+    if not stone.has_surfaced(at):
+        return f" — surfaces {discord.utils.format_dt(stone.opens_at, style='R')}"
+    if stone.has_closed(at):
+        return f" — closed {discord.utils.format_dt(stone.closes_at, style='R')}"
+    if stone.closes_at:
+        return f" — until {discord.utils.format_dt(stone.closes_at, style='R')}"
+    return ""
 
 
 def media_url(field) -> str | None:
@@ -76,25 +103,62 @@ class PoneglyphView(discord.ui.View):
         self.crew = crew
         self.rows: list[tuple[str, int, int, bool]] = []
         self.held = False
+        self.surfaced = True
+        self.closed = False
 
     async def load(self):
-        self.rows = await progress_of(self.poneglyph, self.player)
+        now = timezone.now()
+        self.surfaced = self.poneglyph.has_surfaced(now)
+        self.closed = self.poneglyph.has_closed(now)
         self.held = self.poneglyph.pk in await stones_held(self.hunt, self.player, self.crew)
+        # a stone that has not surfaced keeps its set to itself: that is the whole point of a
+        # release date, and reading it off a disabled button would give the game away
+        self.rows = await progress_of(self.poneglyph, self.player) if self.surfaced else []
         complete = bool(self.rows) and all(owned >= needed for _, owned, needed, _ in self.rows)
-        self.hand_in.disabled = self.held or not complete
+
+        self.hand_in.disabled = True
         if self.held:
             self.hand_in.label = "Already held"
+        elif not self.surfaced:
+            self.hand_in.label = "Not surfaced yet"
+        elif self.closed:
+            self.hand_in.label = "This stone has closed"
         elif self.hunt.is_crew_hunt and self.crew is None:
-            self.hand_in.disabled = True
             self.hand_in.label = "Pick a crew first"
+        elif complete:
+            self.hand_in.disabled = False
         return self
 
     def embed(self) -> discord.Embed:
         embed = discord.Embed(
-            title=f"{HELD if self.held else MISSING} {self.poneglyph.name}",
+            title=f"{stone_icon(self.poneglyph, self.held)} {self.poneglyph.name}",
             colour=settings.embed_colour,
             description=self.poneglyph.hint or None,
         )
+        if not self.surfaced:
+            embed.add_field(
+                name="Not surfaced yet",
+                value="This stone has not been read yet. It surfaces "
+                f"{discord.utils.format_dt(self.poneglyph.opens_at, style='R')}, and only then does it say "
+                "what it asks for.",
+                inline=False,
+            )
+            if url := media_url(self.hunt.poneglyph_image):
+                embed.set_thumbnail(url=url)
+            return embed
+        if self.closed:
+            embed.add_field(
+                name="Closed",
+                value=f"This stone closed {discord.utils.format_dt(self.poneglyph.closes_at, style='R')}. "
+                "Whatever it asked for, it is no longer taking it.",
+                inline=False,
+            )
+        elif self.poneglyph.closes_at:
+            embed.add_field(
+                name="Closes",
+                value=discord.utils.format_dt(self.poneglyph.closes_at, style="R"),
+                inline=False,
+            )
         if self.rows:
             embed.add_field(
                 name="Bring these",
@@ -111,15 +175,43 @@ class PoneglyphView(discord.ui.View):
             embed.set_thumbnail(url=url)
         return embed
 
+    def confirmation(self) -> str:
+        """
+        What the player is about to agree to.
+
+        Consumed treasures are spelled out one by one: handing a set in is the only thing in the
+        hunt that destroys anything, and "are you sure" is worth nothing if it does not say what
+        is about to go.
+        """
+        consumed = [(label, needed) for label, _, needed, consume in self.rows if consume]
+        lines = [f"Hand the set in for **{self.poneglyph.name}**?"]
+        if consumed:
+            lines.append(f"These are **handed over for good** and will leave your {settings.plural_collectible_name}:")
+            lines += [f"- **{label}** ×{needed}" for label, needed in consumed]
+        else:
+            lines.append(f"-# Nothing is consumed — you keep every {settings.collectible_name}.")
+        if self.hunt.is_crew_hunt and self.crew is not None:
+            lines.append(f"-# The stone goes to **{self.crew.name}**, not to you alone.")
+        return "\n".join(lines)[:2000]
+
     @discord.ui.button(label="Hand the set in", style=discord.ButtonStyle.success)
     async def hand_in(self, interaction: discord.Interaction["BallsDexBot"], button: discord.ui.Button):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        confirm = ConfirmChoiceView(
+            interaction, accept_message="Handing it in…", cancel_message="Nothing was handed in."
+        )
+        await interaction.response.send_message(self.confirmation(), view=confirm, ephemeral=True)
+        await confirm.wait()
+        if not confirm.value:
+            return
+        # the confirming click has already answered its own message, so the outcome of the claim
+        # goes out as a follow-up of that click rather than of the button above
+        answer = confirm.interaction_response
         claimed, message = await self.cog.claim(
             self.hunt, self.poneglyph, self.player, self.crew, interaction.guild_id
         )
         # the player hears the outcome first: everything below is decoration, and decoration
         # must never be the reason an answer never arrives
-        await interaction.followup.send(message, ephemeral=True)
+        await answer.followup.send(message, ephemeral=True)
         if not claimed:
             return
 
@@ -142,12 +234,26 @@ class StoneSelect(discord.ui.Select):
                 discord.SelectOption(
                     label=stone.name[:100],
                     value=str(stone.pk),
-                    emoji=HELD if stone.pk in view.held else MISSING,
-                    description=(stone.hint[:100] or None),
+                    emoji=stone_icon(stone, stone.pk in view.held),
+                    description=self.describe(stone)[:100] or None,
                 )
                 for stone in view.stones[:25]
             ],
         )
+
+    @staticmethod
+    def describe(stone: Poneglyph) -> str:
+        """
+        The grey line under a stone's name in the menu.
+
+        A select option carries no markup, so the dates here are written out plainly rather than
+        left to Discord to render the way the embed does.
+        """
+        if not stone.has_surfaced():
+            return f"Surfaces {stone.opens_at:%d %b, %H:%M} UTC"
+        if stone.has_closed():
+            return f"Closed {stone.closes_at:%d %b, %H:%M} UTC"
+        return stone.hint or ""
 
     async def callback(self, interaction: discord.Interaction["BallsDexBot"]):
         stone = next(s for s in self.hunt_view.stones if str(s.pk) == self.values[0])
@@ -182,13 +288,22 @@ class HuntView(discord.ui.View):
             inline=False,
         )
         if self.stones:
+            now = timezone.now()
             embed.add_field(
                 name="Poneglyphs",
                 value="\n".join(
-                    f"{HELD if stone.pk in self.held else MISSING} {stone.name}" for stone in self.stones
+                    f"{stone_icon(stone, stone.pk in self.held, now)} {stone.name}"
+                    + ("" if stone.pk in self.held else stone_note(stone, now))
+                    for stone in self.stones
                 )[:1024],
                 inline=False,
             )
+            # the legend only earns its line when there is something in the list to decode
+            marks = [f"{LOCKED} not surfaced yet"] if any(not x.has_surfaced(now) for x in self.stones) else []
+            if any(x.has_closed(now) for x in self.stones):
+                marks.append(f"{CLOSED} closed")
+            if marks:
+                embed.add_field(name="\u200b", value="-# " + " · ".join(marks), inline=False)
         if self.hunt.is_crew_hunt and self.crew is None:
             embed.add_field(
                 name="No crew",
@@ -236,8 +351,12 @@ class HuntCog(commands.Cog):
         The requirements are counted again here: a treasure can leave a collection between
         opening the stone and pressing the button, and the button is not what decides.
         """
-        if not hunt.is_live() or not poneglyph.is_open():
+        if not hunt.is_live():
             return False, "This hunt is closed."
+        if not poneglyph.has_surfaced():
+            return False, "That stone has not surfaced yet."
+        if poneglyph.has_closed():
+            return False, "That stone has closed, and is no longer taking anything."
         if hunt.is_crew_hunt and crew is None:
             return False, "Pick a crew in `/player settings` first."
 
@@ -365,7 +484,9 @@ class HuntCog(commands.Cog):
 
         player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
         crew = await crew_of(player) if hunt.is_crew_hunt else None
-        stones = [stone async for stone in hunt.poneglyphs.all() if stone.is_open()]
+        # every stone of the hunt, open or not: a locked one shows when it surfaces and a closed
+        # one shows that it has gone, which is what turns the list into the hunt's calendar
+        stones = [stone async for stone in hunt.poneglyphs.all()]
         held = await stones_held(hunt, player, crew)
 
         view = HuntView(self, hunt, stones, held, player, crew)

@@ -172,6 +172,13 @@ class Poneglyph(models.Model):
         help_text="This stone stays hidden until then, which is how a hunt releases one a week. Leave empty "
         "to open it with the hunt itself.",
     )
+    closes_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="This stone can no longer be claimed after then, which is how a hunt gives one stone a "
+        "window of its own. It stays listed, marked as closed, so a latecomer can see what they missed. "
+        "Leave empty for a stone that stays claimable as long as the hunt runs.",
+    )
     announced_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -199,9 +206,18 @@ class Poneglyph(models.Model):
 
     requirements: models.QuerySet["PoneglyphRequirement"]
 
-    def is_open(self, at: datetime | None = None) -> bool:
-        """Whether this stone is visible yet, assuming its hunt is live."""
+    def has_surfaced(self, at: datetime | None = None) -> bool:
+        """Whether this stone's treasures are known yet. A stone can have surfaced and since closed."""
         return self.opens_at is None or self.opens_at <= (at or timezone.now())
+
+    def has_closed(self, at: datetime | None = None) -> bool:
+        """Whether this stone's window has passed. A closed stone is still listed, just not claimable."""
+        return self.closes_at is not None and self.closes_at < (at or timezone.now())
+
+    def is_open(self, at: datetime | None = None) -> bool:
+        """Whether this stone can be claimed right now, assuming its hunt is live."""
+        at = at or timezone.now()
+        return self.has_surfaced(at) and not self.has_closed(at)
 
     @property
     def announcement_scope(self) -> str:
