@@ -101,20 +101,64 @@ Dans les deux cas, rien n'est joignable de l'extérieur.
 5. Pas de guerre vivante, ou joueur sans équipage → 0 point, en silence. C'est déjà le
    comportement de `score()`, aucun code pour ça.
 
-## Sens 2 — OPDex → kots : l'appartenance aux équipages (étape 2)
+## Sens 2 — OPDex → kots : l'appartenance aux équipages
 
-Pas encore figé. La forme prévue : un `GET` authentifié par le même secret, servi par le
-**panel** et non par le bot, puisqu'il n'a qu'à lire la base.
+Pour une seule règle de jeu : **on ne frappe pas quelqu'un de son propre équipage.** C'est la
+seule raison pour laquelle kots a besoin de savoir, et ça détermine toute la forme ci-dessous.
+
+Servi par le **même serveur, le même port et le même secret** que le rapport. Une route de plus
+dans le processus du bot, qui a déjà l'accès à la base — rien de neuf à exposer.
 
 ```
-GET https://opdex.eu/api/kots/crews?guild_id=...
-→ {"crews": [{"id": 3, "name": "Straw Hat Pirates", "emoji": "🏴‍☠️"}],
-   "members": {"111": 3, "222": 7}}
+POST http://127.0.0.1:15262/api/crews
+Authorization: Bearer <le même secret>
+Content-Type: application/json
+
+{"guild_id": 123456789, "discord_ids": [111, 222, 333]}
 ```
 
-À trancher avec Audrey avant d'écrire quoi que ce soit : quand kots interroge (ouverture du
-salon d'attente ? à chaque arrivée ?), ce qu'il fait si OPDex ne répond pas, la composition
-des équipes, et ce qu'est un joueur sans équipage dans un mode de guerre.
+```json
+{
+  "members": {
+    "111": {"crew_id": 3, "name": "Straw Hat Pirates", "emoji": "🏴‍☠️", "label": "🏴‍☠️ Straw Hat Pirates"},
+    "222": {"crew_id": 7, "name": "Heart Pirates", "emoji": "💛", "label": "💛 Heart Pirates"},
+    "333": null
+  }
+}
+```
+
+Les clés sont les identifiants **en chaîne**, parce que c'est ce qu'ils deviennent en passant
+par JSON : un appelant qui comparerait au nombre qu'il a envoyé les manquerait tous.
+
+`null` veut dire « aucun équipage à signaler », et couvre les deux cas — joueur sans équipage, et
+joueur qu'OPDex n'a jamais vu. kots les traite pareil : une faction d'un seul, qui ne marque rien.
+Il n'y a rien à faire de la différence.
+
+### Les trois règles d'usage
+
+- **kots demande les joueurs de son salon, jamais toute la table.** Ce qui n'est pas nécessaire
+  ne sort pas.
+- **Une seule fois, au démarrage de la partie**, et la réponse est figée pour toute sa durée.
+  Pas à chaque arrivée dans le salon. La raison n'est pas la simplicité : un joueur qui change
+  d'équipage en pleine partie changerait de camp au milieu d'un combat.
+- **kots n'écrit rien.** L'instantané vit le temps de la partie. Sinon il y aurait deux sources
+  de vérité sur qui est dans quel équipage, et elles divergeraient. OPDex reste l'autorité.
+
+### Si OPDex ne répond pas
+
+Le raid de guerre **refuse de démarrer**, et le dit. Pas de repli silencieux vers un
+chacun-pour-soi : ce serait un autre jeu, et un joueur venu pour une guerre d'équipages ne
+devrait pas s'y retrouver sans le savoir. C'est pour ça qu'un échec de lecture renvoie 500 et
+jamais 400 — kots doit pouvoir réessayer.
+
+Le même interrupteur `enabled` ferme les deux portes, volontairement : le pont est une seule
+chose, et un mode guerre ne doit pas continuer de tourner sur une moitié.
+
+### Ce que ça ne change pas
+
+Même en mode guerre, **le rapport de fin de partie ne porte aucun identifiant d'équipage.**
+OPDex sait déjà qui est où : il retrouve l'équipage vainqueur depuis les identifiants Discord
+des gagnants et sa propre table. Le principe 2 tient dans les deux sens.
 
 ## Nouvelles sources de points
 
