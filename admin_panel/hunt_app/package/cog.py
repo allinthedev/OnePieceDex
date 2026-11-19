@@ -398,6 +398,40 @@ class HuntCog(commands.Cog):
         )
         return True, "\n".join(lines)
 
+    async def shares(
+        self, hunt: Hunt, player: Player, crew: Crew | None
+    ) -> tuple[dict[int, int], set[int], set[int]]:
+        """
+        Who is paid for finishing a hunt: the berries owed to each player, who gets the treasure,
+        and who claimed a stone.
+
+        A hunt run per player pays the one who finished it, and that is all of it. A crew hunt
+        pays every member who claimed a stone in full, because gathering the sets is the work,
+        and hands the crew a share on top. Without that the whole reward went to whoever placed
+        the last stone, which is usually the easiest one of the hunt.
+        """
+        if not hunt.is_crew_hunt or crew is None:
+            return ({player.pk: hunt.reward_money} if hunt.reward_money else {}), {player.pk}, {player.pk}
+
+        claimers = {
+            claimer
+            async for claimer in PoneglyphClaim.objects.filter(poneglyph__hunt=hunt, crew=crew)
+            .exclude(player__isnull=True)
+            .values_list("player_id", flat=True)
+        }
+        claimers.add(player.pk)
+        members = {
+            member async for member in CrewMembership.objects.filter(crew=crew).values_list("player_id", flat=True)
+        }
+        money = {claimer: hunt.reward_money for claimer in claimers} if hunt.reward_money else {}
+        share = hunt.reward_money * hunt.crew_share // 100
+        if share:
+            for member in members:
+                money[member] = money.get(member, 0) + share
+        # a claimer who has left the crew since keeps what their stones earned them
+        cards = claimers | members if hunt.crew_reward_ball else claimers
+        return {paid: amount for paid, amount in money.items() if amount > 0}, cards, claimers
+
     async def finish(self, hunt: Hunt, player: Player, crew: Crew | None, server_id: int | None) -> str:
         """Hand over the reward for a whole hunt, once."""
         try:
@@ -406,34 +440,51 @@ class HuntCog(commands.Cog):
             )
         except IntegrityError:
             return ""
+        money, cards, claimers = await self.shares(hunt, player, crew)
         lines = [hunt.completion_message or f"**{hunt.name}** is complete."]
+
         if ball := hunt.cached_reward_ball:
-            instance = await BallInstance.objects.acreate(
-                player=player,
-                ball_id=ball.pk,
-                special_id=hunt.reward_special_id,
-                attack_bonus=0,
-                health_bonus=0,
-                server_id=server_id,
-            )
-            completion.reward_instance = instance
-            await completion.asave(update_fields=("reward_instance",))
-            lines.append(f"You received **{ball.country}**.")
-        if hunt.reward_money:
-            await player.add_money(
-                hunt.reward_money,
+            for paid in sorted(cards):
+                instance = await BallInstance.objects.acreate(
+                    player_id=paid,
+                    ball_id=ball.pk,
+                    special_id=hunt.reward_special_id,
+                    attack_bonus=0,
+                    health_bonus=0,
+                    server_id=server_id,
+                )
+                if paid == player.pk:
+                    # the completion keeps the finisher's copy, as the one it can point at
+                    completion.reward_instance = instance
+                    await completion.asave(update_fields=("reward_instance",))
+            if player.pk in cards:
+                lines.append(f"You received **{ball.country}**.")
+        async for paid in Player.objects.filter(pk__in=sorted(money)):
+            await paid.add_money(
+                money[paid.pk],
                 reason=BerryTransaction.Reason.ACHIEVEMENT,
                 description=f"Hunt reward: {hunt.name}",
                 server_id=server_id,
             )
-            lines.append(f"You received {format_currency(hunt.reward_money, False, self.bot)}.")
+        if mine := money.get(player.pk):
+            lines.append(f"You received {format_currency(mine, False, self.bot)}.")
+        others = len((cards | set(money)) - {player.pk})
+        if others and crew is not None:
+            lines.append(f"-# {others} other member(s) of {crew.name} were paid their share.")
+
         await score_quietly(player.pk, CrewWarRule.Source.HUNT_COMPLETED)
         if hunt.announce_completion:
-            await self.announce_completion(hunt, player, crew)
-        log.info(f"Hunt {hunt.name} finished by {crew.name if crew else player.discord_id}.", extra={"webhook": True})
+            await self.announce_completion(hunt, player, crew, claimers)
+        log.info(
+            f"Hunt {hunt.name} finished by {crew.name if crew else player.discord_id}: "
+            f"{len(cards)} treasure(s) and {sum(money.values()):,} berries over {len(money)} player(s).",
+            extra={"webhook": True},
+        )
         return "\n".join(lines)
 
-    async def announce_completion(self, hunt: Hunt, player: Player, crew: Crew | None) -> None:
+    async def announce_completion(
+        self, hunt: Hunt, player: Player, crew: Crew | None, claimers: set[int] | None = None
+    ) -> None:
         """
         Tell every spawn channel that a hunt has been finished.
 
@@ -449,13 +500,31 @@ class HuntCog(commands.Cog):
             description=hunt.completion_message or f"{winner} put every poneglyph back together.",
         )
         embed.add_field(name="Finished by", value=winner, inline=False)
+        if crew is not None and claimers:
+            # mentions inside an embed never ping, so the ones who did the gathering can be
+            # named without sending the whole crew a notification
+            names = [
+                f"<@{discord_id}>"
+                async for discord_id in Player.objects.filter(pk__in=sorted(claimers)).values_list(
+                    "discord_id", flat=True
+                )
+            ]
+            shown = ", ".join(names[:15])
+            if len(names) > 15:
+                shown += f" and {len(names) - 15} more"
+            embed.add_field(name="Stones claimed by", value=shown[:1024], inline=False)
         rewards = []
         if hunt.reward_money:
             rewards.append(format_currency(hunt.reward_money, False, self.bot))
         if ball := hunt.cached_reward_ball:
             rewards.append(f"**{ball.country}**")
         if rewards:
-            embed.add_field(name="Reward", value=" and ".join(rewards), inline=False)
+            value = " and ".join(rewards)
+            if crew is not None:
+                value += ", to every member who claimed a stone"
+                if hunt.crew_share:
+                    value += f"\nand {hunt.crew_share}% of it to every member of the crew"
+            embed.add_field(name="Reward", value=value[:1024], inline=False)
 
         picture = (crew.victory_image if crew and crew.victory_image else None) or hunt.completed_image
         if url := media_url(picture):

@@ -16,6 +16,7 @@ crews rather than between individuals.
 from datetime import datetime
 
 from crew_app.models import Crew
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -104,6 +105,20 @@ class Hunt(models.Model):
         help_text="The special put on that treasure. Ignored without a reward treasure.",
     )
     reward_special_id: int | None
+    crew_share = models.PositiveSmallIntegerField(
+        default=20,
+        validators=(MaxValueValidator(100),),
+        verbose_name="crew share (%)",
+        help_text="What every member of the crew receives when the hunt is finished, as a percentage of the "
+        "berries above, on top of the full reward each member who claimed a stone is paid. 20 pays a fifth. "
+        "Set to 0 to pay the claimers alone. A hunt run per player ignores this.",
+    )
+    crew_reward_ball = models.BooleanField(
+        default=True,
+        verbose_name="treasure for every member",
+        help_text="Hand the reward treasure to every member of the crew, not only to the ones who claimed a "
+        "stone. A hunt run per player ignores this.",
+    )
     completion_message = models.CharField(
         max_length=256,
         blank=True,

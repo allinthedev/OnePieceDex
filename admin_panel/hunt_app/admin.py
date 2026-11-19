@@ -68,9 +68,18 @@ class HuntAdmin(admin.ModelAdmin):
         (
             "Reward for finishing",
             {
-                "description": "Handed over once every poneglyph of the hunt is held — by the player in an "
-                "individual hunt, by the crew in a crew one.",
-                "fields": ["reward_money", "reward_ball", "reward_special", "completion_message"],
+                "description": "Handed over once every poneglyph of the hunt is held. In an individual hunt "
+                "the player who finished it is paid. In a crew hunt every member who claimed a stone is paid "
+                "in full, and the crew takes a share on top — otherwise the whole reward went to whoever "
+                "placed the last stone, which is usually the easiest one.",
+                "fields": [
+                    "reward_money",
+                    "reward_ball",
+                    "reward_special",
+                    "crew_share",
+                    "crew_reward_ball",
+                    "completion_message",
+                ],
             },
         ),
     ]
