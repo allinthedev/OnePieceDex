@@ -10,11 +10,13 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels
+from ballsdex.core.utils.checks import app_check, has_permissions
 from ballsdex.core.utils.leaderboard import EXTRA_ROWS, LEADERBOARD_SIZE, send_leaderboard
 from bd_models.models import Player
 from crew_app.models import Crew, CrewMembership, CrewWar, CrewWarEntry, CrewWarPayout, CrewWarReward, CrewWarRule
 from crew_app.payouts import ladder
 from crew_app.scoring import (
+    award,
     discord_ranking,
     last_gain,
     name_of,
@@ -33,6 +35,11 @@ if TYPE_CHECKING:
 log = logging.getLogger("ballsdex.packages.crew")
 
 MEDALS = ("🥇", "🥈", "🥉")
+# what one embed field holds, and how many of them the table of crews may spend on itself: an
+# embed is capped at 6000 characters all told, and the rest of it has to fit too
+FIELD_LIMIT = 1024
+STANDINGS_FIELDS = 5
+BLANK = "​"  # a zero-width space: an embed field has to be given a name, and this reads as none
 REACHED = "✅"
 LOCKED = "⬜"
 REPLACED = "↩️"
@@ -60,8 +67,28 @@ def placed(table: list[tuple[int, int]]) -> list[tuple[int, int, int]]:
     return rows
 
 
+def chunked(lines: list[str], limit: int = FIELD_LIMIT) -> list[list[str]]:
+    """
+    Pack lines into blocks no longer than one embed field holds, breaking only between lines.
+
+    A table of 46 crews runs well past a field's 1024 characters, and a table simply cut there
+    loses the crews at the bottom without saying so — which is how half a dex goes missing.
+    """
+    blocks: list[list[str]] = [[]]
+    length = 0
+    for line in lines:
+        if blocks[-1] and length + len(line) + 1 > limit:
+            blocks.append([])
+            length = 0
+        blocks[-1].append(line)
+        length += len(line) + 1
+    return [block for block in blocks if block]
+
+
 class CrewCog(commands.GroupCog, group_name="crew"):
     """Crews and the war between them."""
+
+    admin = app_commands.Group(name="admin", description="Crew war administration.")
 
     def __init__(self, bot: "BallsDexBot"):
         self.bot = bot
@@ -345,6 +372,60 @@ class CrewCog(commands.GroupCog, group_name="crew"):
             )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    @admin.command(name="points")
+    @app_check(has_permissions("crew_app.add_crewwarentry"))
+    @app_commands.describe(
+        user="Who earned them. The points go to the crew they fly with.",
+        points="How many to add. A negative number takes points off.",
+        reason="What they were for. Shown to the player as what they last earned.",
+    )
+    async def admin_points(
+        self,
+        interaction: discord.Interaction["BallsDexBot"],
+        user: discord.User,
+        points: int,
+        reason: str | None = None,
+    ):
+        """
+        Give a player's crew points by hand, for what no rule can see.
+        """
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        war = await self.current_war()
+        if war is None:
+            await interaction.followup.send("No crew war is running, so there is nothing to score for.")
+            return
+        if not points:
+            await interaction.followup.send("Zero points would write a line and change nothing.")
+            return
+
+        player = await Player.objects.filter(discord_id=user.id).afirst()
+        membership = (
+            await CrewMembership.objects.filter(player=player).select_related("crew").afirst()
+            if player is not None
+            else None
+        )
+        if player is None or membership is None:
+            await interaction.followup.send(
+                f"{user.display_name} flies no flag, so there is no crew to pay. "
+                "They pick one in `/player settings`.",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+
+        crew = membership.crew
+        await award(war, player.pk, crew.pk, points, note=reason or "")
+        mine = await player_points(war, player.pk)
+        ours = await CrewWarEntry.objects.filter(war=war, crew=crew).aaggregate(total=Sum("points"))
+        log.info(
+            "crew war: %s gave %s %+d point(s) for %s", interaction.user.id, user.id, points, reason or "no reason"
+        )
+        told = f"Written as: {reason}" if reason else "No reason given."
+        await interaction.followup.send(
+            f"**{points:+d}** to {crew.label}, through {user.display_name}. "
+            f"They are now on **{mine:,}** and their crew on **{ours['total'] or 0:,}**. {told}",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
     def ladder_text(self, rungs: list[CrewWarReward], status) -> str:
         """
         One line per rung, marked by `status(rung)`, truncated to fit an embed field.
@@ -389,17 +470,21 @@ class CrewCog(commands.GroupCog, group_name="crew"):
             embed.add_field(name="Standings", value="Nobody has scored yet.", inline=False)
             return embed
         total = sum(points for _, points in table) or 1
+        lines = [
+            f"{medal(place)} {crews[crew_id].label if crew_id in crews else crew_id} — "
+            f"**{points:,}** *({points / total * 100:.0f}%)*"
+            for place, crew_id, points in placed(table)
+        ]
+        # a dex running fifty crews has a table longer than one field, so it is spread over
+        # several rather than cut off at the first thousand characters
+        blocks = chunked(lines)
+        for index, block in enumerate(blocks[:STANDINGS_FIELDS]):
+            embed.add_field(name="Standings" if index == 0 else BLANK, value="\n".join(block), inline=False)
+        left = sum(len(block) for block in blocks[STANDINGS_FIELDS:])
+        if left:
+            embed.add_field(name=BLANK, value=f"-# and {left} more crew(s) further down.", inline=False)
         embed.add_field(
-            name="Standings",
-            value="\n".join(
-                f"{medal(place)} {crews[crew_id].label if crew_id in crews else crew_id} — "
-                f"**{points:,}** *({points / total * 100:.0f}%)*"
-                for place, crew_id, points in placed(table)
-            )[:1024],
-            inline=False,
-        )
-        embed.add_field(
-            name="​",
+            name=BLANK,
             value="-# `/crew leaderboard <crew>` for the top 20 of one crew, `/crew user` for a player's card.",
             inline=False,
         )

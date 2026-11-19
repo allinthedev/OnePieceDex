@@ -192,6 +192,25 @@ async def taken_today(war: CrewWar, player_id: int, rule: CrewWarRule) -> int:
     return taken["total"] or 0
 
 
+async def award(war: CrewWar, player_id: int, crew_id: int, points: int, *, note: str = "") -> CrewWarEntry:
+    """
+    Write points no rule paid for: a tournament the staff ran, a King of the Seas, an apology.
+
+    Kept with the rest of the ledger rather than in the command that calls it, so a line given
+    by hand looks exactly like one the bus scored - same war, same crew, same table.
+    """
+    entry = await CrewWarEntry.objects.acreate(
+        war=war,
+        crew_id=crew_id,
+        player_id=player_id,
+        source=Source.MANUAL,
+        points=points,
+        note=note[:128],
+    )
+    log.info("crew war: %s given %s points by hand (%s)", player_id, points, note or "no reason")
+    return entry
+
+
 async def score_quietly(player_id: int, source: str) -> int:
     """
     `score`, but a failure is logged rather than raised.
@@ -305,4 +324,7 @@ def name_of(entry: CrewWarEntry) -> str:
     rule at all, and there the source stands in.
     """
     rule = entry._state.fields_cache.get("rule")
-    return rule.label if rule is not None else entry.get_source_display()
+    if rule is not None:
+        return rule.label
+    # a line given by hand has no rule and carries its own reason instead
+    return entry.note or entry.get_source_display()

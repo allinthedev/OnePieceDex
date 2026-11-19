@@ -82,6 +82,15 @@ class CrewWarRuleInline(admin.TabularInline):
     verbose_name = "scoring rule"
     verbose_name_plural = "What is worth points"
 
+    def formfield_for_choice_field(self, db_field, request, **kwargs):
+        # "awarded by an admin" is what a line given by hand carries. No event dispatches it, so
+        # a rule for it would never score, and offering it here only invites one to be written.
+        if db_field.name == "source":
+            kwargs["choices"] = [
+                choice for choice in CrewWarRule.Source.choices if choice[0] != CrewWarRule.Source.MANUAL
+            ]
+        return super().formfield_for_choice_field(db_field, request, **kwargs)
+
 
 class CrewWarRewardInline(admin.TabularInline):
     """
@@ -337,7 +346,7 @@ class CrewWarAdmin(admin.ModelAdmin):
 class CrewWarEntryAdmin(admin.ModelAdmin):
     """Read-only: one line per deed, written by the bot. This is what the standings add up."""
 
-    list_display = ("created_at", "war", "crew", "player", "source", "points")
+    list_display = ("created_at", "war", "crew", "player", "source", "points", "note")
     list_filter = ("war", "crew", "source", "created_at")
     search_fields = ("player__discord_id",)
     list_select_related = ("war", "crew", "player")

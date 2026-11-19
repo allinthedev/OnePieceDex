@@ -183,6 +183,10 @@ class CrewWarRule(models.Model):
         WEEKLY_PACK = "weekly_pack", "Claimed the weekly pack"
         PLAYED = "played", "Played at all that day"
 
+        # -- and the one nothing dispatches: what a line given by hand carries, so points an
+        # admin awards for a tournament or a King of the Seas sit in the same ledger as the rest
+        MANUAL = "manual", "Awarded by an admin"
+
     # the deeds a treasure passes through, where naming one is worth something: "caught Luffy"
     # reads as a deed, "bought Luffy from the merchant" does not
     BALL_SOURCES = (
@@ -339,6 +343,11 @@ class CrewWarRule(models.Model):
         )
 
     def clean(self):
+        # no event carries this one, so a rule for it would sit there scoring nothing at all
+        if self.source == self.Source.MANUAL:
+            raise ValidationError(
+                {"source": "Nothing dispatches this. Points by hand are given with /crew admin points."}
+            )
         # "played" is scored off every slash command, so without a cap it would pay a player
         # for scrolling through their inventory all evening. The cap is what turns it into
         # "turned up today", which is the only thing it is good for.
@@ -395,6 +404,13 @@ class CrewWarEntry(models.Model):
     )
     rule_id: int | None
     points = models.IntegerField()
+    note = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="Why these points were given, for the lines written by hand. Shown to the player as what "
+        "they last earned, in place of the deed a rule would have named.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
