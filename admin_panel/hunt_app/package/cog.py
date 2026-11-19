@@ -22,6 +22,7 @@ from ballsdex.core.utils.broadcast import announce_to_spawn_channels
 from ballsdex.core.utils.buttons import ConfirmChoiceView
 from bd_models.models import BallInstance, Player
 from hunt_app.models import Hunt, HuntCompletion, Poneglyph, PoneglyphClaim
+from hunt_app.rewards import split_reward
 from settings.models import settings
 from settings.utils import format_currency
 
@@ -423,14 +424,8 @@ class HuntCog(commands.Cog):
         members = {
             member async for member in CrewMembership.objects.filter(crew=crew).values_list("player_id", flat=True)
         }
-        money = {claimer: hunt.reward_money for claimer in claimers} if hunt.reward_money else {}
-        share = hunt.reward_money * hunt.crew_share // 100
-        if share:
-            for member in members:
-                money[member] = money.get(member, 0) + share
-        # a claimer who has left the crew since keeps what their stones earned them
-        cards = claimers | members if hunt.crew_reward_ball else claimers
-        return {paid: amount for paid, amount in money.items() if amount > 0}, cards, claimers
+        money, cards = split_reward(hunt, claimers, members)
+        return money, cards, claimers
 
     async def finish(self, hunt: Hunt, player: Player, crew: Crew | None, server_id: int | None) -> str:
         """Hand over the reward for a whole hunt, once."""
