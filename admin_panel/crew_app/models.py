@@ -159,6 +159,14 @@ class CrewWarRule(models.Model):
         ROYALE_CHEST = "royale_chest", "Opened a chest in a Royale match"
         ROYALE_BOUNTY = "royale_bounty", "Claimed a bounty in a Royale match"
 
+        # -- the same five, done in a crew war raid. Separate rules so a war kill can be worth
+        # more than an ordinary one without either bot being redeployed.
+        ROYALE_WAR_PLAYED = "royale_war_played", "Played a crew war raid"
+        ROYALE_WAR_WIN = "royale_war_win", "Won a crew war raid"
+        ROYALE_WAR_KILL = "royale_war_kill", "Killed someone in a crew war raid"
+        ROYALE_WAR_CHEST = "royale_war_chest", "Opened a chest in a crew war raid"
+        ROYALE_WAR_BOUNTY = "royale_war_bounty", "Claimed a bounty in a crew war raid"
+
         # -- the events the staff run
         BOUNTY_CLAIMED = "bounty_claimed", "Caught a wanted treasure"
         PONEGLYPH_CLAIMED = "poneglyph_claimed", "Claimed a poneglyph"

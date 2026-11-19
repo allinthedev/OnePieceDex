@@ -95,6 +95,15 @@ class Event(StrEnum):
     ROYALE_CHEST = "royale_chest"  # a player opened a chest, dispatched once per chest
     ROYALE_BOUNTY = "royale_bounty"  # a player claimed a bounty, dispatched once per bounty
 
+    # -- the same deeds done in a crew war raid, kept apart so that a kill in a war can be
+    # priced differently from a kill in an ordinary match. Which of the two sets a report
+    # raises is decided by the `mode` it carries, and by nothing else.
+    ROYALE_WAR_PLAYED = "royale_war_played"  # a player took part in a crew war raid
+    ROYALE_WAR_WIN = "royale_war_win"  # a player was named a winner of a crew war raid
+    ROYALE_WAR_KILL = "royale_war_kill"  # a kill in a crew war raid, dispatched once per kill
+    ROYALE_WAR_CHEST = "royale_war_chest"  # a chest opened in a crew war raid, once per chest
+    ROYALE_WAR_BOUNTY = "royale_war_bounty"  # a bounty claimed in a crew war raid, once per bounty
+
     # -- berries
     CURRENCY_RECEIVED = "currency_received"  # a player received berries from someone, a player or an admin
     CURRENCY_SENT = "currency_sent"  # a player gave berries to someone
