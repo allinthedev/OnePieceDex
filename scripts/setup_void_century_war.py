@@ -15,14 +15,21 @@ Everything happens in one transaction, rolled back unless APPLY=1. Nothing is ev
 a war, a hunt, a stone or a poster that already carries the same name or window is reported and
 left exactly as it is, so a second run after a half-finished first one is safe.
 
+One thing it will not do: break a war that is still running. The scoring reads a single war —
+the enabled one with the latest start date — and stops counting altogether when that one is not
+inside its window. So a war starting on Sunday, enabled today, silently takes the running war's
+place and nothing scores for it until Sunday. When another war is still live, this one is
+therefore created turned OFF, and the script says when to tick it on. The running war is never
+touched, whatever DISABLE_OTHERS says.
+
 Environment:
     APPLY=1           write it. Without this nothing is kept.
     LADDER_CARD=...   the treasure handed over by the card rungs, by name (exact or unique
                       substring). Left out, the rungs are created paying berries only and the
                       cards are listed for you to add in the panel.
     HUNT_CARD=...     the treasure the finished hunt hands over, same rule.
-    DISABLE_OTHERS=1  turn off any other war that is still enabled. Two enabled wars is the one
-                      state in which the scoring can quietly stop counting anything at all.
+    DISABLE_OTHERS=1  turn off the other wars that are enabled but no longer running. A war
+                      that is still live is never touched: see below.
     SEED=...          changes which treasures the stones and the posters draw. The default is
                       fixed, so the dry run and the real run pick the same ones.
 """
@@ -309,15 +316,27 @@ try:
             say(f"  main server: {panel.main_server_id}")
 
         others = list(CrewWar.objects.filter(enabled=True).exclude(name=WAR_NAME))
-        if others:
+        running = [other for other in others if other.is_live()]
+        stale = [other for other in others if not other.is_live()]
+        # a war starting later than a running one takes its place the moment it is enabled, and
+        # scores nothing until its own window opens. So this one waits, turned off, by hand.
+        start_enabled = not running
+        for other in running:
+            ends = f"{other.ends_at:%a %d %b %H:%M} UTC" if other.ends_at else "no end set"
+            warn(
+                f"{other.name!r} is still running ({ends}). This war was created TURNED OFF so it "
+                "cannot take its place: enabled today it would stop that war scoring at once, and "
+                "score nothing itself until Sunday. Tick Enabled on it once that war is over."
+            )
+        if stale:
             if DISABLE_OTHERS:
-                CrewWar.objects.filter(pk__in=[war.pk for war in others]).update(enabled=False)
-                say(f"  turned off {len(others)} other enabled war(s): {', '.join(war.name for war in others)}")
+                CrewWar.objects.filter(pk__in=[other.pk for other in stale]).update(enabled=False)
+                say(f"  turned off {len(stale)} war(s) past their window: {', '.join(o.name for o in stale)}")
             else:
                 warn(
-                    f"{len(others)} other war(s) are still enabled ({', '.join(war.name for war in others)}). "
-                    "The scoring reads one war only and can land on the wrong one. Re-run with "
-                    "DISABLE_OTHERS=1, or turn them off in the panel."
+                    f"{len(stale)} war(s) are enabled but outside their window "
+                    f"({', '.join(o.name for o in stale)}). They stop this one scoring if they start "
+                    "later than it. Re-run with DISABLE_OTHERS=1, or untick them in the panel."
                 )
 
         ladder_ball = one_ball(LADDER_CARD)
@@ -341,17 +360,18 @@ try:
             name=WAR_NAME,
             defaults={
                 "description": WAR_DESCRIPTION,
-                "enabled": True,
+                "enabled": start_enabled,
                 "starts_at": WAR_START,
                 "ends_at": WAR_END,
                 "announce_to": AnnouncementScope.ALL,
             },
         )
         if fresh:
-            say(f"  created: {war.name}")
+            say(f"  created: {war.name}" + ("" if start_enabled else "  (TURNED OFF, see above)"))
             say(f"    {WAR_START:%a %d %b %H:%M} -> {WAR_END:%a %d %b %H:%M} UTC, result announced everywhere")
         else:
-            say(f"  already there, left as it is: {war.name} ({war.starts_at} -> {war.ends_at})")
+            state = "enabled" if war.enabled else "turned off"
+            say(f"  already there, left as it is: {war.name} ({war.starts_at} -> {war.ends_at}, {state})")
 
         tiers = {level.name: level for level in CollectorTierLevel.objects.all()}
         for source, points, cap, minimum, tier_name in RULES:
@@ -510,6 +530,9 @@ try:
                 say(f"  ! {note}")
         say("")
         say("Still to do by hand, in the panel:")
+        if not start_enabled:
+            say("  - TICK ENABLED on the war, once the one still running is over. Until you do,")
+            say("    nothing of this scores at all. Everything else is already in place.")
         say("  - the war banner, and the hunt's banner, completion picture and stone picture")
         say("  - each crew's victory picture, which only ever plays on a win")
         say("  - the reward treasures, if you did not name them above")
