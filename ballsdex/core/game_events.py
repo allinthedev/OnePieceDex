@@ -88,6 +88,13 @@ class Event(StrEnum):
     BOSS_WIN = "boss_win"  # a player was named the winner of a boss fight
     COMMAND = "command"  # a player used a slash command
 
+    # -- grand line royale, a separate bot that reports its matches here (see royale_app)
+    ROYALE_PLAYED = "royale_played"  # a player took part in a royale match that reached its end
+    ROYALE_WIN = "royale_win"  # a player was named a winner of a royale match
+    ROYALE_KILL = "royale_kill"  # a player killed someone in a royale match, dispatched once per kill
+    ROYALE_CHEST = "royale_chest"  # a player opened a chest, dispatched once per chest
+    ROYALE_BOUNTY = "royale_bounty"  # a player claimed a bounty, dispatched once per bounty
+
     # -- berries
     CURRENCY_RECEIVED = "currency_received"  # a player received berries from someone, a player or an admin
     CURRENCY_SENT = "currency_sent"  # a player gave berries to someone
