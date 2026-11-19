@@ -17,12 +17,12 @@ admin panel, with no deploy on either bot. Sending only kills would have made it
 
 import logging
 
+from crew_app.models import CrewWarEntry, CrewWarRule
 from django.db.models import Sum
 from django.utils import timezone
 
 from ballsdex.core.game_events import Event, EventContext, bus
 from bd_models.models import Player
-from crew_app.models import CrewWarEntry, CrewWarRule
 
 from .models import RoyaleMatch
 
