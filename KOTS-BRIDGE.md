@@ -211,9 +211,13 @@ barème peut être créée quand on veut.
 2. **Panel admin → Royale settings** : coller un long secret aléatoire, cocher `Enabled`, et
    éventuellement mettre l'id du serveur dans la liste (vide = tous les serveurs).
    Sans secret, le serveur webhook ne démarre même pas.
-3. **Côté kots** : la même valeur dans la variable de secret de son `.env` (son
-   `.env.example` donne le nom exact), puis `/config opdex` pour l'allumer sur le serveur.
-   L'adresse par défaut est déjà la bonne.
+3. **Côté kots** : la même valeur dans `OPDEX_BRIDGE_SECRET` de son `.env`, puis redémarrer
+   le service (`sudo systemctl restart grandline-bot`). `OPDEX_BRIDGE_URL` a déjà la bonne
+   valeur par défaut, il n'y a rien à y mettre.
+   Puis, sur Discord, **`/config warbridge`** pour l'allumer sur le serveur.
+
+   Deux interrupteurs indépendants de ce côté : sans secret dans l'environnement le pont
+   n'essaie même pas d'envoyer, et sans `/config warbridge` il n'envoie pas non plus.
 4. **Crew wars → la guerre en cours → Crew war rules** : ajouter une règle de source
    *« Killed someone in a Royale match »*, avec les points et, si besoin, un plafond journalier.
    Sans cette règle, les rapports arrivent et ne marquent rien — ce qui est un état parfaitement
