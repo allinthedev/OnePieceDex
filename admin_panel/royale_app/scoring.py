@@ -13,6 +13,11 @@ Why five deeds are dispatched when only one is scored: an event nobody has writt
 costs a cached lookup and scores nothing (`crew_app.scoring.score` checks the rule before the
 player). So sending all of them now means adding "a chest is worth 2" later is one row in the
 admin panel, with no deploy on either bot. Sending only kills would have made it a deploy.
+
+The same five again for a crew war raid, under events of their own: a kill in a war is a
+different deed from a kill in an ordinary match, and a war has to be able to price it
+differently. Which set a report raises is decided by its `mode` and by nothing else — the
+report still carries no crew id, and this module still never decides who a deed counts for.
 """
 
 import logging
@@ -45,14 +50,37 @@ MAX_PLAYERS = 100
 MAX_PER_DEED = 1000
 MAX_DEEDS = 2000
 
-# What each counted field of a player's line becomes on the bus. The number in the field is how
-# many times the deed happened, so three kills are three events and the war's daily cap can
-# limit them one by one.
-COUNTED_DEEDS = (
-    ("kills", Event.ROYALE_KILL),
-    ("chests_opened", Event.ROYALE_CHEST),
-    ("bounties_claimed", Event.ROYALE_BOUNTY),
-)
+# The counted fields of a player's line. The number in the field is how many times the deed
+# happened, so three kills are three events and the war's daily cap can limit them one by one.
+DEED_FIELDS = ("kills", "chests_opened", "bounties_claimed")
+
+# The mode Royale stamps on a crew war raid. An ordinary match says "normal", and a co-op raid
+# reports nothing at all.
+WAR_MODE = "crewwar"
+
+# What each mode raises on the bus. A crew war raid has five events of its own, so that a kill
+# in a war can be priced differently from a kill in an ordinary match — which is the whole
+# reason `mode` travels in the report at all.
+#
+# A mode this bot has never heard of raises nothing. The match is still written down, so the
+# mistake shows up in the panel as a match worth zero rather than being quietly paid at
+# ordinary rates: a report is only ever worth what an admin has said it is worth.
+MODE_EVENTS = {
+    "normal": {
+        "played": Event.ROYALE_PLAYED,
+        "win": Event.ROYALE_WIN,
+        "kills": Event.ROYALE_KILL,
+        "chests_opened": Event.ROYALE_CHEST,
+        "bounties_claimed": Event.ROYALE_BOUNTY,
+    },
+    WAR_MODE: {
+        "played": Event.ROYALE_WAR_PLAYED,
+        "win": Event.ROYALE_WAR_WIN,
+        "kills": Event.ROYALE_WAR_KILL,
+        "chests_opened": Event.ROYALE_WAR_CHEST,
+        "bounties_claimed": Event.ROYALE_WAR_BOUNTY,
+    },
+}
 
 # the ledger lines a match can produce, read back after scoring to say what it actually gave
 ROYALE_SOURCES = (
@@ -61,6 +89,11 @@ ROYALE_SOURCES = (
     CrewWarRule.Source.ROYALE_KILL,
     CrewWarRule.Source.ROYALE_CHEST,
     CrewWarRule.Source.ROYALE_BOUNTY,
+    CrewWarRule.Source.ROYALE_WAR_PLAYED,
+    CrewWarRule.Source.ROYALE_WAR_WIN,
+    CrewWarRule.Source.ROYALE_WAR_KILL,
+    CrewWarRule.Source.ROYALE_WAR_CHEST,
+    CrewWarRule.Source.ROYALE_WAR_BOUNTY,
 )
 
 
@@ -107,7 +140,7 @@ def validate(body) -> dict:
         if not isinstance(line, dict):
             raise ReportError(f"players[{index}] is not an object")
         _as_int(line.get("discord_id"), f"players[{index}].discord_id", low=1)
-        for field, _ in COUNTED_DEEDS:
+        for field in DEED_FIELDS:
             if field in line:
                 deeds += _as_int(line[field], f"players[{index}].{field}", low=0, high=MAX_PER_DEED)
     if deeds > MAX_DEEDS:
@@ -147,6 +180,15 @@ async def ingest(body: dict) -> tuple[RoyaleMatch, bool]:
         log.info("royale bridge: %s had already been scored, nothing given again", match_id)
         return row, False
 
+    events = MODE_EVENTS.get(row.mode)
+    if events is None:
+        log.warning(
+            "royale bridge: %s arrived with mode %r, which raises nothing here — the match is "
+            "written down and scores zero",
+            match_id,
+            row.mode,
+        )
+
     since = timezone.now()
     known: list[int] = []
     for line in players:
@@ -159,7 +201,8 @@ async def ingest(body: dict) -> tuple[RoyaleMatch, bool]:
             log.info("royale bridge: %s played %s but has never used this bot", discord_id, match_id)
             continue
         known.append(player.pk)
-        await _dispatch_player(player, line, guild_id, channel_id)
+        if events is not None:
+            await _dispatch_player(player, line, guild_id, channel_id, events)
 
     points = await CrewWarEntry.objects.filter(
         source__in=ROYALE_SOURCES,
@@ -180,15 +223,16 @@ async def ingest(body: dict) -> tuple[RoyaleMatch, bool]:
     return row, True
 
 
-async def _dispatch_player(player: Player, line: dict, guild_id, channel_id) -> None:
-    """Every deed one player's line carries, put on the bus."""
+async def _dispatch_player(player: Player, line: dict, guild_id, channel_id, events: dict) -> None:
+    """Every deed one player's line carries, put on the bus, in this match's own events."""
     context = EventContext(server_id=guild_id if isinstance(guild_id, int) else None)
     where = channel_id if isinstance(channel_id, int) else None
 
-    await bus.dispatch(player, Event.ROYALE_PLAYED, context=context, channel_id=where)
+    await bus.dispatch(player, events["played"], context=context, channel_id=where)
     # `is True` and not truthiness: the string "false" is truthy, and a win is worth points
     if line.get("winner") is True:
-        await bus.dispatch(player, Event.ROYALE_WIN, context=context, channel_id=where)
-    for field, event in COUNTED_DEEDS:
+        await bus.dispatch(player, events["win"], context=context, channel_id=where)
+    for field in DEED_FIELDS:
+        event = events[field]
         for _ in range(int(line.get(field) or 0)):
             await bus.dispatch(player, event, context=context, channel_id=where)

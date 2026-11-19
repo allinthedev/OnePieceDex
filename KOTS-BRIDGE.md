@@ -69,7 +69,9 @@ Dans les deux cas, rien n'est joignable de l'extérieur.
 - **Un seul envoi par partie**, à la fin, tous les joueurs dedans. Pas un envoi par action.
 - **`match_id` est stable** : généré une fois à la fin de la partie et réutilisé à chaque
   réessai. C'est lui qui garantit qu'une partie ne paie jamais deux fois.
-- **Étape 1 : `mode == "normal"` seulement.** Les raids n'envoient rien.
+- **Deux modes envoient, le troisième non.** `"normal"` pour une partie classique, `"crewwar"`
+  pour un raid de guerre d'équipages. Un raid co-op ordinaire n'envoie rien du tout : il ne
+  marque rien, et il est écarté avant même que le rapport soit construit.
 - **File persistante** côté kots : un rapport attend un `2xx` et survit à un redémarrage du
   bot ou à une indisponibilité d'OPDex. Il n'est jamais perdu en silence.
 - Pas de `partner_id`, pas de notion d'équipe en v1. Les duos formés en partie ne sortent pas
@@ -96,8 +98,11 @@ Dans les deux cas, rien n'est joignable de l'extérieur.
    rien n'est refait. C'est le patron de `CrewWarPayout`, qui rend le paiement rejouable.
 3. Pour chaque joueur : résout le `Player` par `discord_id`. Inconnu → journalisé et compté
    dans la ligne du match, pas d'erreur.
-4. Envoie les événements sur le bus : `kills` fois `Event.ROYALE_KILL`. C'est `crew_app` qui
-   note, avec le barème du panel et ses plafonds journaliers.
+4. Envoie les événements sur le bus, **dans le jeu d'événements du `mode` du rapport** :
+   `kills` fois `Event.ROYALE_KILL` en partie normale, `Event.ROYALE_WAR_KILL` en guerre.
+   C'est `crew_app` qui note, avec le barème du panel et ses plafonds journaliers.
+   Un `mode` qu'OPDex ne connaît pas n'émet rien : le match est quand même écrit, et apparaît
+   dans le panel à zéro point. Mieux vaut un zéro visible qu'un paiement au mauvais tarif.
 5. Pas de guerre vivante, ou joueur sans équipage → 0 point, en silence. C'est déjà le
    comportement de `score()`, aucun code pour ça.
 
@@ -178,8 +183,31 @@ le joueur. Donc les émettre toutes tout de suite veut dire qu'« un coffre vaut
 **une ligne dans le panel, sans déploiement d'aucun des deux bots**. N'en émettre qu'une aurait
 fait de chaque ajout un déploiement.
 
-Le mode de guerre aura ses propres sources, pour qu'un meurtre en guerre puisse valoir autre
-chose qu'un meurtre en partie normale. C'est à ça que sert `mode` dans le rapport.
+### Les cinq mêmes, en guerre
+
+Un raid de guerre d'équipages émet **cinq sources à lui**, qui reflètent les cinq précédentes :
+
+| Source | Quand |
+|---|---|
+| `royale_war_kill` | un meurtre entre équipages, une fois par meurtre |
+| `royale_war_played` | avoir pris part à un raid de guerre |
+| `royale_war_win` | avoir été nommé vainqueur d'un raid de guerre |
+| `royale_war_chest` | un coffre ouvert pendant un raid de guerre |
+| `royale_war_bounty` | une prime encaissée pendant un raid de guerre |
+
+Pourquoi les dédoubler plutôt que réutiliser les cinq autres : un meurtre en guerre n'est pas
+le même geste qu'un meurtre en partie normale, et une guerre doit pouvoir lui donner un autre
+prix — et un autre plafond journalier — sans que ça change quoi que ce soit aux parties
+classiques. C'est exactement à ça que sert `mode` dans le rapport : c'est lui, et lui seul, qui
+décide quel jeu d'événements part sur le bus.
+
+Aucune de ces dix sources ne marque tant qu'une règle n'existe pas dans le panel. Les deux
+listes sont indépendantes : on peut payer les meurtres en guerre et rien en partie normale,
+ou l'inverse.
+
+**Ce que le mode guerre ne change pas** : le rapport ne porte toujours aucun identifiant
+d'équipage, dans aucun mode. OPDex retrouve l'équipage de chacun dans sa propre table. Le
+principe 2 ne souffre pas d'exception.
 
 ---
 
