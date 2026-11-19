@@ -383,7 +383,9 @@ def opening_embed(bot: "BallsDexBot", opening: Opening, user: discord.abc.User) 
     )[:4000]
     embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
 
-    footer = f"Spent {format_currency(opening.spent, False, bot)} • Balance {opening.balance:,}"
+    # no bot, so no emoji: a footer is plain text to Discord and a custom emoji would show
+    # there as <:berry:123456789012345678> rather than as a picture
+    footer = f"Spent {format_currency(opening.spent, False)} • Balance {opening.balance:,}"
     if pack.rare_rarity is not None and pack.luck_ramp:
         if opening.dry_packs:
             bonus = round(luck_bonus(pack.luck_ramp, opening.dry_packs) * 100)

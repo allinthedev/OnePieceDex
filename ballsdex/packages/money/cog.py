@@ -261,9 +261,10 @@ class Money(commands.GroupCog):
             channel_id=interaction.channel_id,
         )
 
-        emoji = settings.currency_emoji(self.bot) or settings.currency_symbol or ""
         lines = [
-            f"**{currency_settings.base_daily_amount:,}** {emoji} claimed!",
+            # through the shared formatter, so the daily shows the symbol and the emoji like
+            # everything else rather than picking one of them on its own
+            f"**{format_currency(currency_settings.base_daily_amount, bot=self.bot)}** claimed!",
             f"+{streak_bonus:,} bonus for streak - {streak_day}/7 days streak \N{FIRE}",
         ]
         for candidate in matching_roles:
