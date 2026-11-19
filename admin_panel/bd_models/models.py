@@ -302,6 +302,14 @@ class Special(models.Model):
     )
     tradeable = models.BooleanField(help_text="Whether balls of this event can be traded", default=True)
     hidden = models.BooleanField(help_text="Hides the event from user commands", default=False)
+    counts_toward_collectors = models.BooleanField(
+        default=False,
+        verbose_name="counts for collectors",
+        help_text="Only matters for a special a collector tier gives. Those are normally left out of every "
+        "collector requirement that does not name them, so a collector card can never be the treasure it "
+        "asks for. Tick this when the special is also earned another way, or when its cards are meant to be "
+        "spent on a further craft, like an elemental.",
+    )
     credits = models.CharField(max_length=64, help_text="Author of the special event artwork", null=True)
 
     objects: Manager[Self] = Manager()

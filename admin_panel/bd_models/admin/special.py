@@ -25,12 +25,31 @@ class SpecialAdmin(admin.ModelAdmin):
                 "at the specified time.",
             },
         ),
-        ("Advanced", {"fields": ["tradeable", "hidden"], "classes": ["collapse"]}),
+        (
+            "Advanced",
+            {
+                "fields": ["tradeable", "hidden", "counts_toward_collectors"],
+                "classes": ["collapse"],
+                "description": "A special given to collector cards is normally left out of every collector "
+                "requirement that does not name it, so a card cannot be the treasure it asks for. The last "
+                "option here hands that back.",
+            },
+        ),
     ]
 
-    list_display = ["name", "pk", "emoji_display", "layer", "start_date", "end_date", "rarity", "hidden"]
-    list_editable = ["hidden", "rarity"]
-    list_filter = ["hidden", "tradeable"]
+    list_display = [
+        "name",
+        "pk",
+        "emoji_display",
+        "layer",
+        "start_date",
+        "end_date",
+        "rarity",
+        "hidden",
+        "counts_toward_collectors",
+    ]
+    list_editable = ["hidden", "rarity", "counts_toward_collectors"]
+    list_filter = ["hidden", "tradeable", "counts_toward_collectors"]
 
     search_fields = ["name", "catch_phrase", "pk"]
 

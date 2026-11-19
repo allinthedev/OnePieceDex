@@ -20,6 +20,7 @@ from bd_models.models import (
     FRAMED,
     BallInstance,
     Player,
+    Special,
     balls,
     frame_entry,
     is_frame_special,
@@ -82,10 +83,16 @@ def collector_card_special_ids() -> set[int]:
     """
     Specials given to collector cards. Treasures with one of these never count toward requirements, otherwise a
     Luffy collector card would count as the Luffy required to keep it.
+
+    A special ticked "counts for collectors" is left out of that: its cards are earned another way too, or they
+    are meant to be spent on a further craft, and the safeguard would only stand in the way.
     """
     ids = set(CollectorTierLevel.objects.filter(special__isnull=False).values_list("special_id", flat=True))
     ids.update(CollectorTier.objects.filter(special__isnull=False).values_list("special_id", flat=True))
-    return ids
+    if not ids:
+        return ids
+    kept = Special.objects.filter(pk__in=ids, counts_toward_collectors=True).values_list("pk", flat=True)
+    return ids - set(kept)
 
 
 def requirement_queryset(
