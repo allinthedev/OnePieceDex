@@ -207,6 +207,20 @@ def is_claimed(player_id: int, tier: CollectorTier) -> bool:
     ).exists()
 
 
+def was_ever_claimed(player_id: int, tier: CollectorTier) -> bool:
+    """
+    Whether this player has ever held this tier, the claims taken back included.
+
+    A collector taken back can be claimed again, and claiming is what fires `Event.CRAFT`. Without this, giving
+    a required treasure away, waiting out the grace period and claiming again is paid a second time by everything
+    counting crafts - a crew war rule, an event pass goal - for a card the player had already earned. The claim
+    still hands the card back; only the reward is paid once.
+    """
+    return CollectorInstance.objects.filter(
+        player_id=player_id, collector_id=tier.collector_id, level_id=tier.level_id
+    ).exists()
+
+
 def claim_tier(player_id: int, tier_id: int, server_id: int | None) -> ClaimResult:
     """
     Claim a collector tier for a player: check the requirements, take the price and the used up treasures, then give
@@ -220,6 +234,8 @@ def claim_tier(player_id: int, tier_id: int, server_id: int | None) -> ClaimResu
             return ClaimResult("unavailable")
         if is_claimed(player_id, tier):
             return ClaimResult("already_claimed")
+        # read before the new row is written, so a claim that follows a revocation is told apart from a first one
+        first_claim = not was_ever_claimed(player_id, tier)
 
         requirements = tier_requirements(tier)
         excluded_specials = collector_card_special_ids()
@@ -284,14 +300,16 @@ def claim_tier(player_id: int, tier_id: int, server_id: int | None) -> ClaimResu
             claimed_at=now,
             monitored=tier.level.monitored,
         )
-        # claiming a tier is what crafting is: the goals counting crafts read the collector and its tier level
-        context = EventContext(
-            instances=[card],
-            collector_id=tier.collector_id,
-            tier_level_id=tier.level_id,
-            price=tier.price or 0,
-            amount=-(tier.price or 0),
-            server_id=server_id,
-        )
-        transaction.on_commit(lambda: bus.dispatch_soon(player_id, Event.CRAFT, context=context))
+        # claiming a tier is what crafting is: the goals counting crafts read the collector and its tier level.
+        # Claiming one back after it was taken away is not: nothing new was built, so nothing is paid for it.
+        if first_claim:
+            context = EventContext(
+                instances=[card],
+                collector_id=tier.collector_id,
+                tier_level_id=tier.level_id,
+                price=tier.price or 0,
+                amount=-(tier.price or 0),
+                server_id=server_id,
+            )
+            transaction.on_commit(lambda: bus.dispatch_soon(player_id, Event.CRAFT, context=context))
     return ClaimResult("claimed", card=card, statuses=statuses)
