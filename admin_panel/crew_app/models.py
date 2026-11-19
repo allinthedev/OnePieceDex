@@ -151,6 +151,14 @@ class CrewWarRule(models.Model):
         BOSS_PLAYED = "boss_played", "Took part in a boss fight"
         BOSS_WIN = "boss_win", "Won a boss fight"
 
+        # -- Grand Line Royale, the other bot. It reports what a player did and nothing else:
+        # who it counts for is read from the crew membership here, never from the report.
+        ROYALE_PLAYED = "royale_played", "Played a Royale match"
+        ROYALE_WIN = "royale_win", "Won a Royale match"
+        ROYALE_KILL = "royale_kill", "Killed someone in a Royale match"
+        ROYALE_CHEST = "royale_chest", "Opened a chest in a Royale match"
+        ROYALE_BOUNTY = "royale_bounty", "Claimed a bounty in a Royale match"
+
         # -- the events the staff run
         BOUNTY_CLAIMED = "bounty_claimed", "Caught a wanted treasure"
         PONEGLYPH_CLAIMED = "poneglyph_claimed", "Claimed a poneglyph"

@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "eventpass_app",
     "crew_app",
     "hunt_app",
+    "royale_app",
     "media_management",
 ]
 
