@@ -202,6 +202,36 @@ class DataActionRow(ActionRow):
 
 
 
+# Discord allows 25 options in one select, and the crew picker spends some of them on itself:
+# one to leave a crew, one to turn the page. A dex running more crews than that pages through
+# them, which is the only way the ones past the limit are reachable at all.
+SELECT_LIMIT = 25
+PAGE_TURN = "page"
+
+
+def crew_page(
+    crews: "list[Crew]", current: "Crew | None", page: int | None = None
+) -> "tuple[list[Crew], int, int]":
+    """
+    The crews one select can show, which page that is, and how many pages there are.
+
+    `page` left empty opens on the page holding the crew the player already flies with, so the
+    menu comes up where they are rather than wherever the list happens to start.
+    """
+    room = SELECT_LIMIT - (1 if current is not None else 0)
+    if len(crews) <= room:
+        return crews, 0, 1
+    room -= 1  # the page turn costs an option of its own
+    pages = -(-len(crews) // room)
+    if page is None:
+        found = next((index for index, crew in enumerate(crews) if crew.pk == current.pk), 0) if current else 0
+        page = found // room
+    page %= pages
+    start = page * room
+    end = start + room
+    return crews[start:end], page, pages
+
+
 class SettingsContainer(Container):
     title = Section(
         TextDisplay(content="# Player settings"),
@@ -370,10 +400,15 @@ class SettingsContainer(Container):
                     item.style = ButtonStyle.primary
                 row.add_item(item)
 
-    def _configure_crew(self, player: Player, crews: "list[Crew]", current: "Crew | None"):
+    def _configure_crew(
+        self, player: Player, crews: "list[Crew]", current: "Crew | None", page: int | None = None
+    ):
         """
         The crew picker. With no crew set up in the panel the whole section disappears, so a dex
         that does not use crews never shows a menu with nothing in it.
+
+        More crews than one select holds are paged through rather than cut off at the limit: a
+        crew a player cannot see is a crew they cannot join.
         """
         if not crews:
             self.remove_item(self.crew_text)
@@ -384,6 +419,7 @@ class SettingsContainer(Container):
         self.crew_text.content = (
             f"### Crew\n-# The crew you play for, in hunts and wars run between crews\n{standing}"
         )
+        shown, page, pages = crew_page(crews, current, page)
         options = [
             discord.SelectOption(
                 label=crew.name[:100],
@@ -392,22 +428,40 @@ class SettingsContainer(Container):
                 description=(crew.description[:100] or None),
                 default=current is not None and crew.pk == current.pk,
             )
-            for crew in crews[:24]
+            for crew in shown
         ]
         if current is not None:
             options.append(discord.SelectOption(label="Leave my crew", value="none", emoji="🚪"))
-        select: Select = Select(placeholder="Pick your crew", options=options)
+        placeholder = "Pick your crew"
+        if pages > 1:
+            following = (page + 1) % pages
+            placeholder = f"Pick your crew - page {page + 1} of {pages}"
+            options.append(
+                discord.SelectOption(
+                    label=f"Show page {following + 1} of {pages}",
+                    value=f"{PAGE_TURN}:{following}",
+                    emoji="➡️",
+                    description=f"{len(crews)} crews in all, {len(shown)} of them on this page",
+                )
+            )
+        select: Select = Select(placeholder=placeholder, options=options)
 
         async def callback(interaction: Interaction):
             from crew_app.models import CrewMembership
 
-            if select.values[0] == "none":
+            chosen = select.values[0]
+            if chosen.startswith(f"{PAGE_TURN}:"):
+                # turning the page picks nothing, so the membership is left exactly as it was
+                self._configure_crew(player, crews, current, int(chosen.partition(":")[2]))
+                await interaction.response.edit_message(view=self.view)
+                return
+            if chosen == "none":
                 await CrewMembership.objects.filter(player=player).adelete()
                 picked = None
             else:
-                picked = next(crew for crew in crews if str(crew.pk) == select.values[0])
+                picked = next(crew for crew in crews if str(crew.pk) == chosen)
                 await CrewMembership.objects.aupdate_or_create(player=player, defaults={"crew": picked})
-            self._configure_crew(player, crews, picked)
+            self._configure_crew(player, crews, picked, page)
             await interaction.response.edit_message(view=self.view)
 
         select.callback = callback
