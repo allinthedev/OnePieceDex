@@ -207,7 +207,7 @@ class CrewWarAdmin(admin.ModelAdmin):
 
     save_on_top = True
     inlines = [CrewWarRuleInline, CrewWarRewardInline]
-    readonly_fields = ("standings_preview", "rewards_preview", "created_at")
+    readonly_fields = ("standings_preview", "rewards_preview", "finished_at", "created_at")
     actions = ["hand_out_rewards"]
 
     def save_related(self, request, form, formsets, change):
@@ -252,16 +252,28 @@ class CrewWarAdmin(admin.ModelAdmin):
         (
             "Paying out",
             {
-                "description": "Set the ladder up below, then select this war in the list and run "
-                "<b>Hand out the rewards</b>. Nothing is paid until you do, and running it twice pays "
-                "nothing twice, so it is safe to run again once the standings have settled.",
-                "fields": ["rewards_preview"],
+                "description": "Set the ladder up below. With <b>Auto finish</b> on, the bot hands it out "
+                "and announces the winner within a couple of minutes of the end date passing, and there is "
+                "nothing left for you to do. Off, select this war in the list and run <b>Hand out the "
+                "rewards</b> yourself — nothing is paid until you do. Either way, paying twice pays nothing "
+                "twice, so it is always safe to run again once the standings have settled.",
+                "fields": ["auto_finish", "finished_at", "rewards_preview"],
             },
         ),
     ]
-    list_display = ("name", "enabled", "starts_at", "ends_at", "rule_count", "entry_count", "announced_at")
-    list_editable = ("enabled",)
-    list_filter = ("enabled", "starts_at", "ends_at", "announce_to")
+    list_display = (
+        "name",
+        "enabled",
+        "starts_at",
+        "ends_at",
+        "auto_finish",
+        "rule_count",
+        "entry_count",
+        "finished_at",
+        "announced_at",
+    )
+    list_editable = ("enabled", "auto_finish")
+    list_filter = ("enabled", "auto_finish", "starts_at", "ends_at", "announce_to")
     search_fields = ("name", "description")
 
     @admin.display(description="Rules")

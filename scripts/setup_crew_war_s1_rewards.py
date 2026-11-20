@@ -16,7 +16,8 @@ container never has to hold it.
     docker compose exec -T -e APPLY=1 admin-panel python3 -m django shell < scripts/setup_crew_war_s1_rewards.py
 
     # create it and hand it out in the same run
-    docker compose exec -T -e APPLY=1 -e PAYOUT=1 admin-panel python3 -m django shell < scripts/setup_crew_war_s1_rewards.py
+    docker compose exec -T -e APPLY=1 -e PAYOUT=1 admin-panel \
+        python3 -m django shell < scripts/setup_crew_war_s1_rewards.py
 
 Everything happens in one transaction, rolled back unless APPLY=1. Nothing is overwritten: a
 rung already on the war at the same (scope, threshold) is left exactly as it is, cards and all,
@@ -272,8 +273,11 @@ try:
             say("  the bot sends the direct messages itself, within a couple of minutes")
         else:
             say("")
-            say("Nothing was handed out. Either re-run with PAYOUT=1, or use the panel's")
-            say('  "Hand out the rewards of the selected wars" action on the war list.')
+            say("Nothing was handed out. Three ways to change that:")
+            say("  - tick Auto finish on the war, and the bot pays the ladder out and announces")
+            say("    the winner on its own, within two minutes of the end date passing")
+            say("  - re-run this with PAYOUT=1")
+            say('  - run "Hand out the rewards of the selected wars" from the war list in the panel')
 
         say("")
         say("-" * 78)
