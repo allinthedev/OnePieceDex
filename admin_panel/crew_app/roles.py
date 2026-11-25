@@ -6,6 +6,11 @@ the dex's own server, where the channels and the colours are. Giving it out in e
 would need permissions in all of them and would mean nothing in most, so the main server is the whole scope of
 this module, on purpose.
 
+Nothing here reads `guild.members`. That list is only filled when the privileged members intent is on, and a
+bot in more than a hundred servers cannot simply switch it on — it needs Discord to approve it. Being
+Administrator on the server does not help: permissions say what the bot may do, the intent says what Discord
+sends it. So members are looked up one by one instead, from the players the database says are in a crew.
+
 Nothing in here ever raises at its caller. A role that cannot be given — the bot missing Manage Roles, the role
 sitting above the bot in the list, the player not even being on the server — is logged and moved past: picking
 a crew must never fail because of what Discord would or would not allow.
@@ -28,6 +33,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("crew.roles")
 
+# how many members one gateway query asks for at a time; Discord allows a hundred
+QUERY_BATCH = 100
+
 
 def main_guild(bot: "BallsDexBot") -> discord.Guild | None:
     """The server the crew roles live on, or None when none is set up."""
@@ -44,28 +52,39 @@ async def role_ids() -> dict[int, int]:
     }
 
 
-async def apply(bot: "BallsDexBot", discord_id: int, crew: Crew | None) -> bool:
+async def find_member(guild: discord.Guild, discord_id: int) -> discord.Member | None:
     """
-    Put one member's crew roles right on the main server: their crew's role on, every other crew's role off.
+    One member of the main server, cache first and Discord second.
 
-    Returns whether anything was changed. Called when a player picks a crew, when they drop it, and when they
-    join the server, so it has to be safe to run again on somebody already in the right state — it is, since it
-    works out the difference first and does nothing when there is none.
+    Without the members intent the cache is nearly empty, so the fetch is the path that actually runs. It costs
+    one request and returns None for somebody who is not on the server, which is an ordinary answer here rather
+    than a failure.
     """
-    guild = main_guild(bot)
-    if guild is None:
-        return False
     member = guild.get_member(discord_id)
-    if member is None:
-        return False  # not on the main server, nothing to give them
+    if member is not None:
+        return member
+    try:
+        return await guild.fetch_member(discord_id)
+    except discord.NotFound:
+        return None
+    except discord.HTTPException:
+        log.exception("crew roles: could not look up %s on the main server", discord_id)
+        return None
 
+
+async def apply_to_member(
+    guild: discord.Guild, member: discord.Member, crew: Crew | None, every_role: set[int]
+) -> bool:
+    """
+    Put one member's crew roles right: their crew's role on, every other crew's role off.
+
+    Returns whether anything changed. Safe to run on somebody already in the right state, since it works out
+    the difference first and does nothing when there is none.
+    """
     wanted_id = crew.role_id if crew is not None else None
-    every_role = set((await role_ids()).values())
-    if not every_role:
-        return False
-
     held = {role.id for role in member.roles}
     to_remove = [guild.get_role(role_id) for role_id in (held & every_role) - {wanted_id}]
+    to_remove = [role for role in to_remove if role is not None]
     to_add = []
     if wanted_id and wanted_id not in held:
         role = guild.get_role(wanted_id)
@@ -73,7 +92,6 @@ async def apply(bot: "BallsDexBot", discord_id: int, crew: Crew | None) -> bool:
             log.warning("crew roles: role %s is set on a crew but not on the server", wanted_id)
         else:
             to_add.append(role)
-    to_remove = [role for role in to_remove if role is not None]
     if not to_add and not to_remove:
         return False
 
@@ -86,13 +104,27 @@ async def apply(bot: "BallsDexBot", discord_id: int, crew: Crew | None) -> bool:
         log.warning(
             "crew roles: not allowed to change the roles of %s. The bot needs Manage Roles, and its own "
             "highest role has to sit above the crew roles.",
-            discord_id,
+            member.id,
         )
         return False
     except discord.HTTPException:
-        log.exception("crew roles: could not change the roles of %s", discord_id)
+        log.exception("crew roles: could not change the roles of %s", member.id)
         return False
     return True
+
+
+async def apply(bot: "BallsDexBot", discord_id: int, crew: Crew | None) -> bool:
+    """Put one player's crew roles right on the main server, looking them up if they are not cached."""
+    guild = main_guild(bot)
+    if guild is None:
+        return False
+    every_role = set((await role_ids()).values())
+    if not every_role:
+        return False
+    member = await find_member(guild, discord_id)
+    if member is None:
+        return False  # not on the main server, nothing to give them
+    return await apply_to_member(guild, member, crew, every_role)
 
 
 async def apply_to_player(bot: "BallsDexBot", player: "Player") -> bool:
@@ -101,28 +133,48 @@ async def apply_to_player(bot: "BallsDexBot", player: "Player") -> bool:
     return await apply(bot, int(player.discord_id), membership.crew if membership else None)
 
 
-async def sync_everyone(bot: "BallsDexBot") -> tuple[int, int]:
+async def sync_everyone(bot: "BallsDexBot") -> tuple[int, int, int]:
     """
-    Run over every member of the main server and put their crew role right. Returns (changed, looked at).
+    Put the crew role right for everyone the database says is in a crew.
 
-    Only the members already in the cache are walked, which is every one of them on a server the bot has the
-    members intent for. Meant for the admin command after the roles are first set up, or after someone has been
-    moving them around by hand.
+    Returns (changed, found on the server, in a crew at all) — the gap between the last two is the people
+    who picked a crew but have never set foot on the main server, which is normal and worth seeing.
+
+    Driven by the membership table rather than by the server's member list, because that list is empty without
+    the privileged members intent. Members are asked for in batches over the gateway, which fills the cache for
+    the ones who are on the server; anyone the batch did not bring back is simply not there.
     """
     guild = main_guild(bot)
     if guild is None:
-        return 0, 0
-    crews = {
-        discord_id: crew_id
-        async for discord_id, crew_id in CrewMembership.objects.values_list("player__discord_id", "crew_id")
-    }
+        return 0, 0, 0
     by_crew = {crew.pk: crew async for crew in Crew.objects.exclude(role_id__isnull=True)}
+    if not by_crew:
+        return 0, 0, 0
+    every_role = {crew.role_id for crew in by_crew.values() if crew.role_id}
+
+    wanted: list[tuple[int, Crew]] = []
+    async for discord_id, crew_id in CrewMembership.objects.filter(crew_id__in=by_crew).values_list(
+        "player__discord_id", "crew_id"
+    ):
+        crew = by_crew.get(crew_id)
+        if crew is not None:
+            wanted.append((int(discord_id), crew))
+
     changed = looked = 0
-    for member in guild.members:
-        if member.bot:
-            continue
-        looked += 1
-        crew = by_crew.get(crews.get(member.id, 0))
-        if await apply(bot, member.id, crew):
-            changed += 1
-    return changed, looked
+    for start in range(0, len(wanted), QUERY_BATCH):
+        batch = wanted[start : start + QUERY_BATCH]
+        try:
+            # one gateway round trip for up to a hundred of them, which fills the cache for the next step
+            await guild.query_members(user_ids=[discord_id for discord_id, _ in batch], cache=True)
+        except Exception:
+            # asking by ID is allowed without the members intent, but if it is refused the lookups below
+            # still work one at a time — slower, never wrong
+            log.debug("crew roles: batch lookup refused, falling back to one request each")
+        for discord_id, crew in batch:
+            member = await find_member(guild, discord_id)
+            if member is None:
+                continue
+            looked += 1
+            if await apply_to_member(guild, member, crew, every_role):
+                changed += 1
+    return changed, looked, len(wanted)

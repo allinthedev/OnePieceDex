@@ -120,9 +120,7 @@ class CrewCog(commands.GroupCog, group_name="crew"):
             return
 
         crew = membership.crew
-        embed = discord.Embed(
-            title=crew.label, colour=settings.embed_colour, description=crew.description or None
-        )
+        embed = discord.Embed(title=crew.label, colour=settings.embed_colour, description=crew.description or None)
         embed.add_field(name="Members", value=str(await crew.members.acount()))
         embed.add_field(name="Flying since", value=discord.utils.format_dt(membership.joined_at, style="D"))
 
@@ -152,9 +150,7 @@ class CrewCog(commands.GroupCog, group_name="crew"):
 
         crews = {crew.pk: crew async for crew in Crew.objects.all()}
         table = await standings(war)
-        embed = discord.Embed(
-            title=war.name, colour=settings.embed_colour, description=war.description or None
-        )
+        embed = discord.Embed(title=war.name, colour=settings.embed_colour, description=war.description or None)
         if table:
             embed.add_field(
                 name="Standings",
@@ -274,9 +270,7 @@ class CrewCog(commands.GroupCog, group_name="crew"):
             return
 
         crew = membership.crew
-        embed.description = (
-            f"Flying {crew.label} since {discord.utils.format_dt(membership.joined_at, style='D')}"
-        )
+        embed.description = f"Flying {crew.label} since {discord.utils.format_dt(membership.joined_at, style='D')}"
         war = await self.current_war()
         if war is None:
             embed.add_field(name="The war", value="No crew war is running right now.", inline=False)
@@ -412,8 +406,7 @@ class CrewCog(commands.GroupCog, group_name="crew"):
         )
         if player is None or membership is None:
             await interaction.followup.send(
-                f"{user.display_name} flies no flag, so there is no crew to pay. "
-                "They pick one in `/player settings`.",
+                f"{user.display_name} flies no flag, so there is no crew to pay. They pick one in `/player settings`.",
                 allowed_mentions=discord.AllowedMentions.none(),
             )
             return
@@ -508,16 +501,24 @@ class CrewCog(commands.GroupCog, group_name="crew"):
                 "No crew has a Discord role set. Put a role ID on a crew in the admin panel first."
             )
             return
-        changed, looked = await sync_everyone(self.bot)
+        changed, found, total = await sync_everyone(self.bot)
         log.info(
-            "%s resynced the crew roles: %s changed out of %s members.",
+            "%s resynced the crew roles: %s changed, %s of %s crew members found on the server.",
             interaction.user,
             changed,
-            looked,
+            found,
+            total,
             extra={"webhook": True},
         )
+        missing = total - found
         await interaction.followup.send(
-            f"Looked at **{looked}** members over **{carrying}** crew role(s), and changed **{changed}**."
+            f"**{total}** player(s) are in a crew, **{found}** of them are on this server, and "
+            f"**{changed}** had their role changed."
+            + (
+                f"\n-# {missing} have never joined this server, so there is nobody to give a role to."
+                if missing
+                else ""
+            )
         )
 
     async def crew_table(self, war: CrewWar) -> discord.Embed:
@@ -656,9 +657,7 @@ class CrewCog(commands.GroupCog, group_name="crew"):
                 names.append(f"{medal(rank)} <@{discord_id}> — **{points:,}**")
             embed.add_field(name="Carried their crew", value="\n".join(names), inline=False)
         embed.add_field(
-            name="​",
-            value="-# The rewards are out. Check your direct messages, or `/crew rewards`.",
-            inline=False,
+            name="​", value="-# The rewards are out. Check your direct messages, or `/crew rewards`.", inline=False
         )
         # the winning crew's own victory picture, which is the point of having one per crew: the
         # whole server sees whose flag went up. The war's banner stands in without one.
@@ -666,10 +665,7 @@ class CrewCog(commands.GroupCog, group_name="crew"):
         if picture:
             embed.set_image(url=f"{settings.site_base_url}/media/{picture.name}")
         sent, missed = await announce_to_spawn_channels(self.bot, embed, scope=war.announce_to)
-        log.info(
-            f"Crew war {war.name} result announced to {sent} channels, {missed} missed.",
-            extra={"webhook": True},
-        )
+        log.info(f"Crew war {war.name} result announced to {sent} channels, {missed} missed.", extra={"webhook": True})
 
     async def tell_players(self, now) -> None:
         """
