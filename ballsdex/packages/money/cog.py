@@ -12,6 +12,7 @@ from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
 from eventpass_app import wallet as pass_wallet
+from eventpass_app.transformers import EventPassTransform
 
 from ballsdex.core.game_events import Event, EventContext, bus, command_did_nothing
 from ballsdex.core.utils.buttons import ConfirmChoiceView
@@ -109,7 +110,13 @@ class Money(commands.GroupCog):
         return Trade.objects.create(player1=sender, player2=recipient, player1_money=amount)
 
     @app_commands.command()
-    async def give(self, interaction: discord.Interaction["BallsDexBot"], user: discord.User, amount: int):
+    async def give(
+        self,
+        interaction: discord.Interaction["BallsDexBot"],
+        user: discord.User,
+        amount: int,
+        event_pass: EventPassTransform | None = None,
+    ):
         """
         Give money to a player.
 
@@ -119,7 +126,25 @@ class Money(commands.GroupCog):
             The player you want to give money to.
         amount: int
             The amount to give.
+        event_pass: EventPass
+            Give that event's own currency instead of berries.
         """
+        if event_pass is not None and not event_pass.currency_name:
+            await interaction.response.send_message(
+                f"**{event_pass.name}** has no currency of its own to give.", ephemeral=True
+            )
+            return
+
+        def worth(value: int) -> str:
+            """The amount written in whichever of the two is being given."""
+            if event_pass is not None:
+                return pass_wallet.format_tokens(event_pass, value)
+            return format_currency(value, bot=self.bot)
+
+        currency = (
+            event_pass.currency_name if event_pass is not None else settings.currency_display_plural(self.bot)
+        )
+
         if amount < 1:
             await interaction.response.send_message("Amount must be strictly positive.", ephemeral=True)
             return
@@ -127,17 +152,18 @@ class Money(commands.GroupCog):
             await interaction.response.send_message("You cannot donate to bots.", ephemeral=True)
             return
         if user == interaction.user:
-            await interaction.response.send_message(
-                f"You cannot give {settings.currency_display_plural(self.bot)} to yourself.", ephemeral=True
-            )
+            await interaction.response.send_message(f"You cannot give {currency} to yourself.", ephemeral=True)
             return
 
         await interaction.response.defer()
         old_player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
-        if not old_player.can_afford(amount):
-            await interaction.followup.send(
-                f"You do not have enough {settings.currency_display_plural(self.bot)}.", ephemeral=True
-            )
+        if event_pass is not None:
+            held = await pass_wallet.abalance(old_player.pk, event_pass.pk)
+            enough = held >= amount
+        else:
+            enough = old_player.can_afford(amount)
+        if not enough:
+            await interaction.followup.send(f"You do not have enough {currency}.", ephemeral=True)
             return
 
         new_player, _ = await Player.objects.aget_or_create(discord_id=user.id)
@@ -149,14 +175,12 @@ class Money(commands.GroupCog):
             await interaction.followup.send("You cannot donate to a blacklisted user.", ephemeral=True)
             return
 
-        currency = settings.currency_display_plural(self.bot)
+        # the policy is about who may send a player money, not about which money it is, so it guards both
         if new_player.berry_policy == BerryPolicy.ALWAYS_DENY:
             await interaction.followup.send(f"This player does not accept {currency}.", ephemeral=True)
             return
         if new_player.berry_policy == BerryPolicy.FRIENDS_ONLY and not await new_player.is_friend(old_player):
-            await interaction.followup.send(
-                f"This player only accepts {currency} from friends.", ephemeral=True
-            )
+            await interaction.followup.send(f"This player only accepts {currency} from friends.", ephemeral=True)
             return
         if new_player.berry_policy == BerryPolicy.REQUEST_APPROVAL:
             view = ConfirmChoiceView(
@@ -166,8 +190,7 @@ class Money(commands.GroupCog):
                 cancel_message="Declined.",
             )
             await interaction.followup.send(
-                f"{user.mention}, {interaction.user.mention} wants to send you "
-                f"{format_currency(amount, bot=self.bot)}. Do you accept?",
+                f"{user.mention}, {interaction.user.mention} wants to send you {worth(amount)}. Do you accept?",
                 view=view,
                 allowed_mentions=await can_mention([new_player]),
             )
@@ -177,18 +200,38 @@ class Money(commands.GroupCog):
             # the balance can move while the prompt is open, so it is checked again below
             await old_player.arefresh_from_db(fields=("money",))
 
-        try:
-            await sync_to_async(self.perform_donation)(old_player, new_player, amount)
-        except NotEnoughMoney:
-            await interaction.followup.send(
-                f"Your balance changed, you do not have enough {settings.currency_display_plural(self.bot)} anymore.",
-                ephemeral=True,
-            )
-            return
+        if event_pass is not None:
+            try:
+                await pass_wallet.agive_to_player(
+                    old_player.pk,
+                    new_player.pk,
+                    event_pass.pk,
+                    amount,
+                    # adjust() trims it to what the ledger column holds
+                    label=f"{interaction.user} to {user}",
+                )
+            except pass_wallet.NotEnough as error:
+                await interaction.followup.send(
+                    f"Your balance changed, you only hold {worth(error.held)} now.", ephemeral=True
+                )
+                return
+        else:
+            try:
+                await sync_to_async(self.perform_donation)(old_player, new_player, amount)
+            except NotEnoughMoney:
+                await interaction.followup.send(
+                    f"Your balance changed, you do not have enough {currency} anymore.", ephemeral=True
+                )
+                return
+
         await interaction.followup.send(
-            f"You just gave {format_currency(amount, bot=self.bot)} to {user.mention}!",
+            f"You just gave {worth(amount)} to {user.mention}!",
             allowed_mentions=await can_mention([new_player]),
         )
+        if event_pass is not None:
+            # the berry quests read `amount` and `received_currency` as berries, so a gift in an event's own
+            # currency stays out of them rather than counting as money it is not
+            return
         bus.dispatch_soon(
             new_player.pk,
             Event.CURRENCY_RECEIVED,
@@ -201,6 +244,7 @@ class Money(commands.GroupCog):
             context=EventContext(partner_discord_id=user.id, amount=amount, server_id=interaction.guild_id),
             channel_id=interaction.channel_id,
         )
+
 
     @app_commands.command()
     async def daily(self, interaction: discord.Interaction["BallsDexBot"]):

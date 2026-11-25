@@ -69,9 +69,8 @@ d'abord.
 ### Les pages de lecture
 
 - **Pass wallets** — ce que chaque joueur détient.
-- **Crew pass wallets** — la cagnotte de chaque équipage.
 - **Pass wallet entries** — le journal : chaque mouvement, sa raison (`pass`, `daily`, `shop`,
-  `crew_gift`, `admin`, `refund`) et son solde après coup. Un écart entre deux lignes successives
+  `gift_sent`, `gift_received`, `admin`, `refund`) et son solde après coup. Un écart entre deux lignes successives
   veut dire que de la monnaie a bougé sans passer par le journal.
 
 ---

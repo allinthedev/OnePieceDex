@@ -38,7 +38,7 @@ Every movement is recorded in **Pass wallet entries**, with the reason `admin` a
 /shop balance
 ```
 
-The player's balance, plus their crew's pot if they have one.
+The player's balance in the event's currency.
 
 ```
 /shop boosts

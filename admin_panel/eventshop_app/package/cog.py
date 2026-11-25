@@ -12,7 +12,6 @@ import logging
 from typing import TYPE_CHECKING
 
 import discord
-from crew_app.models import CrewMembership
 from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import format_dt
@@ -201,57 +200,11 @@ class EventShopCog(commands.GroupCog, name="Event shop", group_name="shop"):
             colour=settings.embed_colour,
             description=f"You hold **{wallet.format_tokens(event_pass, held)}**.",
         )
-        membership = await CrewMembership.objects.filter(player=player).select_related("crew").afirst()
-        if membership is not None:
-            pot = await wallet.acrew_balance(membership.crew_id, event_pass.pk)
-            embed.add_field(
-                name=membership.crew.label,
-                value=f"The crew's pot holds {wallet.format_tokens(event_pass, pot)}.",
-                inline=False,
-            )
         closes = event_pass.claim_until or event_pass.ends_at
         if closes:
             embed.set_footer(text="Spend it before the shop closes.")
             embed.add_field(name="Shop closes", value=format_dt(closes, style="R"))
         await interaction.followup.send(embed=embed)
-
-    @app_commands.command()
-    @app_commands.describe(amount="How much to give.", event_pass="The event, when more than one shop is open.")
-    async def give(
-        self,
-        interaction: discord.Interaction["BallsDexBot"],
-        amount: app_commands.Range[int, 1, 1_000_000_000],
-        event_pass: EventPassTransform | None = None,
-    ):
-        """
-        Give some of your event currency to your own crew's pot.
-        """
-        await interaction.response.defer(thinking=True, ephemeral=True)
-        event_pass, problem = await only_shop(event_pass)
-        if event_pass is None:
-            await interaction.followup.send(problem)
-            return
-        player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
-        membership = await CrewMembership.objects.filter(player=player).select_related("crew").afirst()
-        if membership is None:
-            await interaction.followup.send("You are in no crew, so there is no pot to give to.")
-            return
-        try:
-            pot = await wallet.agive_to_crew(
-                player.pk,
-                membership.crew_id,
-                event_pass.pk,
-                amount,
-                label=f"{interaction.user} to {membership.crew.name}",
-            )
-        except wallet.NotEnough as error:
-            await interaction.followup.send(f"You only hold {wallet.format_tokens(event_pass, error.held)}.")
-            return
-        await interaction.followup.send(
-            f"Given {wallet.format_tokens(event_pass, amount)} to **{membership.crew.label}**. "
-            f"Its pot now holds {wallet.format_tokens(event_pass, pot)}. A gift is one way: it cannot be taken "
-            f"back."
-        )
 
     @admin.command(name="tokens")
     @app_commands.describe(

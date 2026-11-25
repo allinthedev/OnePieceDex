@@ -68,9 +68,8 @@ to draft first.
 ### The pages to read
 
 - **Pass wallets** — what each player holds.
-- **Crew pass wallets** — each crew's pot.
 - **Pass wallet entries** — the ledger: every movement, its reason (`pass`, `daily`, `shop`,
-  `crew_gift`, `admin`, `refund`) and the balance after it. A jump between one row's balance and
+  `gift_sent`, `gift_received`, `admin`, `refund`) and the balance after it. A jump between one row's balance and
   the next means currency moved somewhere that bypassed the ledger.
 
 ---

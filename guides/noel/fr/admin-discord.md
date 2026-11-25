@@ -40,7 +40,7 @@ Chaque mouvement est tracé dans **Pass wallet entries**, avec la raison `admin`
 /shop balance
 ```
 
-Le solde du joueur, plus la cagnotte de son équipage s'il en a une.
+Le solde du joueur dans la monnaie de l'événement.
 
 ```
 /shop boosts

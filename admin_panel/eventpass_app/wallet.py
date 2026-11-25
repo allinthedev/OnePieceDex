@@ -181,6 +181,43 @@ async def agive_to_crew(player_id: int, crew_id: int, event_pass_id: int, amount
     return await sync_to_async(give_to_crew)(player_id, crew_id, event_pass_id, amount, label=label)
 
 
+def give_to_player(sender_id: int, receiver_id: int, event_pass_id: int, amount: int, *, label: str = "") -> int:
+    """
+    Move currency from one player's wallet to another's. Returns the receiver's new balance.
+
+    Both movements happen in one transaction, so the currency is never in two wallets at once and never in
+    none: a gift the sender cannot cover leaves both sides exactly as they were.
+    """
+    from .models import PassWalletEntry
+
+    if amount <= 0:
+        raise ValueError("A gift has to be worth something")
+    if sender_id == receiver_id:
+        raise ValueError("A player cannot give to themselves")
+    with transaction.atomic():
+        adjust(
+            sender_id,
+            event_pass_id,
+            -amount,
+            reason=PassWalletEntry.Reason.GIFT_SENT,
+            description=label or f"Given to player {receiver_id}",
+        )
+        return adjust(
+            receiver_id,
+            event_pass_id,
+            amount,
+            reason=PassWalletEntry.Reason.GIFT_RECEIVED,
+            description=label or f"From player {sender_id}",
+        )
+
+
+async def agive_to_player(
+    sender_id: int, receiver_id: int, event_pass_id: int, amount: int, *, label: str = ""
+) -> int:
+    """Async wrapper around [`give_to_player`][]."""
+    return await sync_to_async(give_to_player)(sender_id, receiver_id, event_pass_id, amount, label=label)
+
+
 async def adaily_grant(player_id: int, *, label: str = "") -> list[tuple["EventPass", int]]:
     """
     Hand out the daily currency of every pass running right now. Returns what each pass gave.

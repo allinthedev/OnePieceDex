@@ -22,13 +22,15 @@ fill a Secret Santa parcel, and they can be given to your crew.
 /shop balance
 ```
 
-What you hold, and what your crew's pot holds if you fly with one.
+What you hold.
 
 ```
-/shop give amount:500
+/money give user:<@someone> amount:500 event_pass:Christmas 2026
 ```
 
-Gives some of your snowflakes to your own crew's pot.
+Gives some of your snowflakes to another player. Leave `event_pass` out and the same command gives berries, the way it
+always has. Whoever you send them to has to accept money from you — the same setting that guards
+berries guards these.
 
 ---
 
@@ -212,8 +214,8 @@ collecting more than one.
 |---|---|
 | `/pass view` | the Christmas pass and its quests |
 | `/daily` | berries **and** snowflakes |
-| `/shop balance` | your snowflakes, and your crew's pot |
-| `/shop give` | give snowflakes to your crew |
+| `/shop balance` | how many snowflakes you hold |
+| `/money give … event_pass:` | give snowflakes to another player |
 | `/shop boosts` | what is boosted right now |
 | `/advent view` · `open` · `catchup` | the calendar |
 | `/santa join` · `wish` · `wishlist` · `target` · `gift` · `pay` · `open` | Secret Santa |

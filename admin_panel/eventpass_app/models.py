@@ -1177,6 +1177,8 @@ class PassWalletEntry(models.Model):
         SHOP = "shop", "Spent in the shop"
         CREW_GIFT = "crew_gift", "Given to a crew"
         CREW_SPEND = "crew_spend", "Spent out of the crew pot"
+        GIFT_SENT = "gift_sent", "Given to a player"
+        GIFT_RECEIVED = "gift_received", "Received from a player"
         ADMIN = "admin", "Set by an admin"
         REFUND = "refund", "Refunded"
 
