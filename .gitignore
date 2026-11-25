@@ -66,3 +66,10 @@ extra/*
 !extra/frames
 !extra/boss
 .gitmodules
+
+# Local-only: kept on the machine that runs the stack, never pushed
+docker-compose.local.yml
+SETUP-REPO-PRIVE.md
+post_topgg_stats_once.py
+scripts/check_crew_war_ready.py
+scripts/setup_crew_war_s1_rewards.py

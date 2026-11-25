@@ -9,7 +9,7 @@ x-common-env-vars:
   # DJANGO_SETTINGS_MODULE=config.production via docker-compose.override.yml, see
   # docs/selfhosting/admin-panel/exposing-to-internet.md
   - &django-settings
-    "DJANGO_SETTINGS_MODULE=admin_panel.settings"
+    "DJANGO_SETTINGS_MODULE=config.production"
 
 
 services:
