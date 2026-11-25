@@ -140,6 +140,8 @@ class BerryTransaction(models.Model):
         BATTLE_WAGER_REFUND = "battle_wager_refund", "Battle wager returned"
         BATTLE_PAYOUT = "battle_payout", "Battle winnings"
 
+        ADVENT_CATCH_UP = "advent_catch_up", "Advent door bought open"
+
     player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="berry_transactions")
     amount = models.BigIntegerField(help_text="Signed: positive credits the player, negative debits them.")
     balance_after = models.PositiveBigIntegerField(help_text="The player's balance once this change was applied.")

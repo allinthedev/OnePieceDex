@@ -21,18 +21,7 @@ from django.utils import timezone
 from merchant_app.models import MerchantItem
 
 from ballsdex.core.game_events import normalize_command
-from bd_models.models import (
-    Ball,
-    BallGroup,
-    Economy,
-    Player,
-    Regime,
-    Special,
-    balls,
-    groups,
-    specials,
-    wants_no_frame,
-)
+from bd_models.models import Ball, BallGroup, Economy, Player, Regime, Special, balls, groups, specials, wants_no_frame
 from settings.models import settings
 
 if TYPE_CHECKING:
@@ -93,6 +82,7 @@ class Announce(models.TextChoices):
 class RewardKind(models.TextChoices):
     BERRIES = "berries", "Berries"
     TREASURE = "treasure", "Treasure"
+    TOKENS = "tokens", "The pass's own currency"
 
 
 class RewardMode(models.TextChoices):
@@ -203,7 +193,8 @@ class RewardLine(models.Model):
         max_length=16,
         choices=RewardKind.choices,
         default=RewardKind.TREASURE,
-        help_text="Berries are always given whatever the bundle's mode; only treasures are picked or drawn.",
+        help_text="Berries and the pass currency are always given whatever the bundle's mode; only treasures "
+        "are picked or drawn.",
     )
     position = models.PositiveSmallIntegerField(
         default=0, help_text="Lines are given, offered and listed from the lowest position."
@@ -333,6 +324,11 @@ class RewardLine(models.Model):
     def __str__(self) -> str:
         if self.kind == RewardKind.BERRIES:
             return f"{self.amount:,} {settings.currency_plural}"
+        if self.kind == RewardKind.TOKENS:
+            # a reward bundle is reusable across passes, so a line cannot know which one names the
+            # currency. Everywhere the pass is in hand — a grant, the shop, /daily — the real label
+            # comes from `wallet.format_tokens` instead.
+            return f"{self.amount:,} pass currency"
         special = self.cached_special
         prefix = f"{self.quantity}x {special.name + ' ' if special else ''}"
         if self.is_pool:
@@ -407,6 +403,25 @@ class EventPass(models.Model):
     )
     final_reward_id: int | None
     final_message = models.TextField(blank=True, default="", help_text="Shown when the pass is completed.")
+    currency_name = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="The name of the currency this pass hands out, like Snowflakes. Left empty, the pass has no "
+        "currency of its own and its shop cannot be used.",
+    )
+    currency_emoji = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Shown next to an amount. A unicode character like ❄️, or a Discord emoji copied whole as "
+        "<:name:id>.",
+    )
+    daily_currency = models.PositiveIntegerField(
+        default=0,
+        help_text="Handed out on top of the berries every time a player claims /daily while the pass is live. "
+        "Zero hands out nothing, which is what a pass without a currency wants.",
+    )
     position = models.PositiveSmallIntegerField(default=0, help_text="Passes are listed from the lowest position.")
 
     access_logic = models.CharField(
@@ -1093,3 +1108,100 @@ class RewardChoice(models.Model):
         db_table = "eventpassrewardchoice"
         ordering = ("pk",)
         indexes = [models.Index(fields=("player", "resolved_at"), name="eventpass_choice_pending_idx")]
+
+
+class PassWallet(models.Model):
+    """
+    What one player holds of a pass's own currency — the snowflakes of a Christmas pass.
+
+    One wallet per player per pass. The currency is born with the event and dies with it, so a season can be
+    archived at the end without ever touching the berry ledger, and a pass that hands out none simply has no
+    wallets.
+    """
+
+    event_pass = models.ForeignKey(EventPass, on_delete=models.CASCADE, related_name="wallets")
+    event_pass_id: int
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="pass_wallets")
+    player_id: int
+    balance = models.PositiveBigIntegerField(default=0, help_text="What is left to spend.")
+    earned = models.PositiveBigIntegerField(
+        default=0, help_text="Everything ever credited, spending included. What a leaderboard of the event reads."
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "eventpasswallet"
+        constraints = [models.UniqueConstraint(fields=("event_pass", "player"), name="eventpass_wallet_unique")]
+
+    def __str__(self) -> str:
+        return f"{self.balance} for {self.player_id}"
+
+
+class CrewPassWallet(models.Model):
+    """
+    The pot a crew's members have given to, out of their own wallets.
+
+    A player may only ever give to their own crew, and what lands here is spent by the crew rather than taken
+    back: a gift is one way.
+    """
+
+    event_pass = models.ForeignKey(EventPass, on_delete=models.CASCADE, related_name="crew_wallets")
+    event_pass_id: int
+    crew = models.ForeignKey("crew_app.Crew", on_delete=models.CASCADE, related_name="pass_wallets")
+    crew_id: int
+    balance = models.PositiveBigIntegerField(default=0, help_text="What the crew has left to spend.")
+    received = models.PositiveBigIntegerField(default=0, help_text="Everything the crew has ever been given.")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "eventpasscrewwallet"
+        constraints = [models.UniqueConstraint(fields=("event_pass", "crew"), name="eventpass_crew_wallet_unique")]
+
+    def __str__(self) -> str:
+        return f"{self.balance} for crew {self.crew_id}"
+
+
+class PassWalletEntry(models.Model):
+    """
+    One movement of a wallet, player's or crew's, so a balance can always be explained.
+
+    Written in the same transaction as the balance it moves, which is what makes a double spend impossible to
+    hide: the balance and the ledger cannot disagree.
+    """
+
+    class Reason(models.TextChoices):
+        PASS = "pass", "Pass reward"
+        DAILY = "daily", "Daily claim"
+        SHOP = "shop", "Spent in the shop"
+        CREW_GIFT = "crew_gift", "Given to a crew"
+        CREW_SPEND = "crew_spend", "Spent out of the crew pot"
+        ADMIN = "admin", "Set by an admin"
+        REFUND = "refund", "Refunded"
+
+    DESCRIPTION_MAX_LENGTH = 128
+
+    wallet = models.ForeignKey(
+        PassWallet, on_delete=models.CASCADE, null=True, blank=True, related_name="entries"
+    )
+    crew_wallet = models.ForeignKey(
+        CrewPassWallet, on_delete=models.CASCADE, null=True, blank=True, related_name="entries"
+    )
+    amount = models.BigIntegerField(help_text="Signed: positive credits the wallet, negative debits it.")
+    balance_after = models.PositiveBigIntegerField(help_text="The balance once this movement was applied.")
+    reason = models.CharField(max_length=16, choices=Reason.choices, default=Reason.ADMIN)
+    description = models.CharField(max_length=DESCRIPTION_MAX_LENGTH, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, editable=False)
+
+    class Meta:
+        managed = True
+        db_table = "eventpasswalletentry"
+        ordering = ("-created_at", "-pk")
+        indexes = [
+            models.Index(fields=("wallet", "-created_at"), name="eventpass_entry_wallet_idx"),
+            models.Index(fields=("crew_wallet", "-created_at"), name="eventpass_entry_crew_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.amount:+} ({self.reason})"

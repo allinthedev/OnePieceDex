@@ -1,4 +1,5 @@
 import os
+import re
 import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -55,6 +56,23 @@ def open_image(image_file: "ImageFieldFile") -> Image.Image:
     descriptors would never be released, eventually exhausting the process' limit.
     """
     return Image.open(image_file.path).convert("RGBA")
+
+
+CREDITS_COLOUR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def parse_credits_colour(value: str | None) -> tuple[int, int, int, int] | None:
+    """
+    The RGBA of the "#RRGGBB" set on a special or a regime, None when nothing is set there.
+
+    Without one the colour is read off the bottom of the finished card, which only ever lands on
+    black or white: on a busy or mid-bright strip both of those can clash with the art or vanish
+    into it, and this is the way out.
+    """
+    value = (value or "").strip()
+    if not CREDITS_COLOUR_RE.match(value):
+        return None
+    return (int(value[1:3], 16), int(value[3:5], 16), int(value[5:7], 16), 255)
 
 
 def get_credit_color(image: Image.Image, region: tuple) -> tuple:
@@ -173,7 +191,15 @@ def draw_card(
     )
     if settings.show_rarity:
         draw.text((1200, 50), str(ball.rarity), font=stats_font, stroke_width=2, stroke_fill=(0, 0, 0, 255))
-    if card_name is not None and card_name in credits_color_cache:
+    # a colour set by hand wins over the one read off the card, and is never cached: changing it in
+    # the admin panel then takes effect on the next card rather than on the next restart
+    forced_colour = parse_credits_colour(special.credits_colour) if special else None
+    if forced_colour is None and not full_art and not background:
+        # the regime's colour is for the cards that actually show its background
+        forced_colour = parse_credits_colour(ball.cached_regime.credits_colour)
+    if forced_colour is not None:
+        credits_color = forced_colour
+    elif card_name is not None and card_name in credits_color_cache:
         credits_color = credits_color_cache[card_name]
     else:
         credits_color = get_credit_color(image, (0, int(image.height * 0.8), image.width, image.height))

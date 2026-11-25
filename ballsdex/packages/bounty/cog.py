@@ -15,6 +15,7 @@ from discord.utils import format_dt
 from django.utils import timezone
 
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels
+from bd_models.enums import AnnouncementScope
 from bd_models.models import Bounty
 from settings.models import settings
 from settings.utils import format_currency
@@ -65,6 +66,11 @@ class Bounties(commands.Cog):
 
         The date is written before the announcement goes out, and only when the row is still
         unannounced, so two overlapping runs of this loop cannot both post the same poster.
+
+        It is written back to NULL when the poster reached nobody: a send that fails, or that
+        finds no channel to post in because the main server or its spawn channel is not set up
+        yet, used to leave the bounty marked as announced for good, with nothing ever posted.
+        The next run tries again instead.
         """
         now = timezone.now()
         due = Bounty.objects.filter(
@@ -76,12 +82,44 @@ class Bounties(commands.Cog):
             ).aupdate(announced_at=now)
             if not claimed_the_announcement:
                 continue
+            await self.put_up_one(bounty)
+
+    async def put_up_one(self, bounty: Bounty):
+        """
+        Post one poster, and hand the bounty back to the next run of the loop if it did not go out.
+
+        A bounty announced nowhere is the one case where reaching no channel is the intent, so it
+        stays marked as announced rather than being tried again every two minutes.
+        """
+        ball = bounty.cached_ball
+        try:
             sent, missed = await announce_to_spawn_channels(self.bot, self.poster(bounty), scope=bounty.announce_to)
-            log.info(
-                f"Wanted poster for {bounty.cached_ball.country} ({bounty.reward:,}) went out to "
-                f"{sent} channels, {missed} missed.",
+        except Exception:
+            await self.announce_again(bounty)
+            log.error(
+                f"Wanted poster for {ball.country} ({bounty.reward:,}) could not go out. It stays unannounced "
+                f"and the next run will try again.",
+                exc_info=True,
                 extra={"webhook": True},
             )
+            return
+        if not sent and bounty.announce_to != AnnouncementScope.NONE:
+            await self.announce_again(bounty)
+            log.warning(
+                f"Wanted poster for {ball.country} ({bounty.reward:,}) reached no channel ({missed} missed). "
+                f"Check the main server and its spawn channel; the next run will try again.",
+                extra={"webhook": True},
+            )
+            return
+        log.info(
+            f"Wanted poster for {ball.country} ({bounty.reward:,}) went out to {sent} channels, {missed} missed.",
+            extra={"webhook": True},
+        )
+
+    @staticmethod
+    async def announce_again(bounty: Bounty):
+        """Put the bounty back in the queue of the loop, so its poster is tried again."""
+        await Bounty.objects.filter(pk=bounty.pk).aupdate(announced_at=None)
 
     @put_up_posters.before_loop
     async def before_put_up_posters(self):

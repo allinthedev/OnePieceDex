@@ -307,7 +307,7 @@ def _apply_frames(
     """
     safe_name = re.sub(r"[^a-z0-9]+", "_", ball.country.lower()).strip("_")
     capacity: dict[str, Any] = dict(ball.capacity_logic)
-    keys = [slugify_frame_name(name)] if no_date else _dated_keys(date_from, date_to, special_id)
+    keys = [slugify_frame_name(name)] if no_date else _dated_keys(date_from, date_to, special_id, name, capacity)
 
     for key in keys:
         file_key = key.replace(":", "_")
@@ -330,11 +330,25 @@ def _apply_frames(
     ball.capacity_logic = capacity
 
 
-def _dated_keys(date_from: date, date_to: date, special_id: int | None) -> list[str]:
-    """Every day of the range, as the key its frame is stored under."""
+def _dated_keys(
+    date_from: date, date_to: date, special_id: int | None, name: str = "", capacity: dict[str, Any] | None = None
+) -> list[str]:
+    """
+    Every day of the range, as the key its frame is stored under.
+
+    A day whose plain key is free, or already held by a frame of this same name, uses that plain key — so
+    every frame that exists today keeps the key it has and editing one still writes over itself. Only when
+    the day is already taken by a frame called something else does the name go into the key, and the two
+    then sit side by side and are drawn between.
+    """
+    capacity = capacity or {}
+    variant = slugify_frame_name(name)
     keys, current = [], date_from
     while current <= date_to:
-        keys.append(frame_key(current, special_id))
+        plain = frame_key(current, special_id)
+        held = capacity.get(plain)
+        taken_by_another = is_frame_entry(held) and slugify_frame_name(str(held.get("name") or "")) != variant
+        keys.append(frame_key(current, special_id, variant) if taken_by_another and variant else plain)
         current += timedelta(days=1)
     return keys
 

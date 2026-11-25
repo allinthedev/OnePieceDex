@@ -99,7 +99,7 @@ class CountryballNamePrompt(Modal, title=f"Catch this {settings.collectible_name
         text = self.view.get_catch_message(ball, has_caught_before, interaction.user.mention)
         if self.view.ballinstance is None:
             if random.random() < currency_settings.spawn_chance:
-                amount = currency_settings.spawn_amount
+                amount = boosted_berries(currency_settings.spawn_amount, interaction.guild_id)
                 await player.add_money(
                     amount,
                     reason=BerryTransaction.Reason.SPAWN_CATCH,
@@ -157,6 +157,40 @@ class CatchRow(ActionRow["BallSpawnView"]):
         else:
             await interaction.response.send_modal(CountryballNamePrompt(self.spawn_view))
 
+
+def boosted_weights(weights: list[float], guild_id: int | None) -> list[float]:
+    """
+    The spawn weights, flattened by a rarity boost bought in the event shop.
+
+    Only ever flattened on the main server, and handed straight back everywhere else — `current` sees to that.
+    The event shop is an app of its own, so a dex running without it keeps the plain draw.
+    """
+    try:
+        from eventshop_app.boosts import current, flatten
+    except ImportError:
+        return weights
+    return flatten(weights, current(guild_id).rarity_exponent)
+
+
+def boosted_special_weights(weights: list[float], population: list[Special], guild_id: int | None) -> list[float]:
+    """The weight of each special, raised by a boost on that special, or on every special at once."""
+    try:
+        from eventshop_app.boosts import current
+    except ImportError:
+        return weights
+    boosts = current(guild_id)
+    if not boosts.anything:
+        return weights
+    return [weight * boosts.special_weight(special.pk) for weight, special in zip(weights, population)]
+
+
+def boosted_berries(amount: int, guild_id: int | None) -> int:
+    """What a catch pays, raised by a berry boost. Never less than the plain amount."""
+    try:
+        from eventshop_app.boosts import current
+    except ImportError:
+        return amount
+    return max(int(amount * current(guild_id).berry_factor), amount)
 
 class BallSpawnView(LayoutView):
     """
@@ -259,14 +293,18 @@ class BallSpawnView(LayoutView):
         return view
 
     @classmethod
-    async def get_random(cls, bot: "BallsDexBot"):
+    async def get_random(cls, bot: "BallsDexBot", guild_id: int | None = None):
         """
         Get a new instance with a random countryball. Rarity values are taken into account.
+
+        `guild_id` is what lets a rarity boost bought in the event shop flatten the weighting, which
+        only ever happens on the main server. Left out, the draw is the plain one — an admin
+        spawning a card by hand is not meant to ride somebody's paid hour.
         """
         countryballs = list(filter(lambda m: m.enabled, balls.values()))
         if not countryballs:
             raise RuntimeError("No ball to spawn")
-        rarities = [x.rarity for x in countryballs]
+        rarities = boosted_weights([x.rarity for x in countryballs], guild_id)
         cb = random.choices(population=countryballs, weights=rarities, k=1)[0]
         return cls(bot, cb)
 
@@ -275,7 +313,13 @@ class BallSpawnView(LayoutView):
         return self.model.country
 
     @staticmethod
-    def get_random_special() -> Special | None:
+    def get_random_special(guild_id: int | None = None) -> Special | None:
+        """
+        The special a new treasure carries, None for a plain one.
+
+        `guild_id` lets a boost raise the chance of one special — the Christmas one — on the main
+        server. The share left for a plain treasure shrinks by exactly as much as the specials gain.
+        """
         population = [
             x
             for x in specials.values()
@@ -288,12 +332,13 @@ class BallSpawnView(LayoutView):
         if not population:
             return None
 
-        common_weight: float = 1 - sum(x.rarity for x in population)
+        boosted = boosted_special_weights([x.rarity for x in population], population, guild_id)
+        common_weight: float = 1 - sum(boosted)
 
         if common_weight < 0:
             common_weight = 0
 
-        weights = [x.rarity for x in population] + [common_weight]
+        weights = boosted + [common_weight]
         # None is added representing the common countryball
         special: Special | None = random.choices(population=population + [None], weights=weights, k=1)[0]
 
@@ -541,7 +586,7 @@ class BallSpawnView(LayoutView):
         special: Special | None = self.special
 
         if not special:
-            special = self.get_random_special()
+            special = self.get_random_special(guild.id if guild else None)
         if bounty is not None and bounty.cached_special:
             special = bounty.cached_special
 

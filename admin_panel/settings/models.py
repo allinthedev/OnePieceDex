@@ -197,8 +197,10 @@ class Settings(models.Model):
     artist_credits_url = models.URLField(
         blank=True,
         default="",
-        help_text="Link to the page crediting the artists (a GitHub file for instance). "
-        "Shown in /about and when displaying a card.",
+        verbose_name="contributor community URL",
+        help_text="Link to the page crediting the people behind the dex — the artists, the patrons who have "
+        "donated and the helpers along the way (a GitHub file for instance). Shown in /about and when displaying "
+        "a card.",
     )
 
     @cached_property

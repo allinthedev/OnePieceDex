@@ -11,6 +11,7 @@ from discord.utils import format_dt
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
+from eventpass_app import wallet as pass_wallet
 
 from ballsdex.core.game_events import Event, EventContext, bus, command_did_nothing
 from ballsdex.core.utils.buttons import ConfirmChoiceView
@@ -269,6 +270,14 @@ class Money(commands.GroupCog):
         ]
         for candidate in matching_roles:
             lines.append(f"+{candidate.bonus_amount:,} bonus applied for being a <@&{candidate.role_id}> supporter")
+        # whatever event is running pays its own currency alongside the berries, which is what
+        # replaces a paid track: everybody who shows up daily earns the event's shop money
+        for event_pass, extra in await pass_wallet.adaily_grant(
+            player.pk, label=f"Daily claim, day {streak_day}/7"
+        ):
+            lines.append(
+                f"+{pass_wallet.format_tokens(event_pass, extra)} from **{event_pass.name}**"
+            )
         lines.append(f"Come back tomorrow {format_dt(cooldown_end, 'R')}")
 
         embed = discord.Embed(description="\n".join(lines), color=settings.embed_colour)
