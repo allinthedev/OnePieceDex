@@ -298,6 +298,15 @@ class EventPassAdmin(admin.ModelAdmin):
                 "fields": ("access_logic", "access_message"),
             },
         ),
+        (
+            "Its own currency",
+            {
+                "description": "Name a currency and the pass gets a wallet of its own, which opens its event "
+                "shop. Leave the name empty and it has none: /shop stays shut for this pass, whatever is on "
+                "sale in it.",
+                "fields": ("currency_name", "currency_emoji", "daily_currency"),
+            },
+        ),
         ("End of the pass", {"fields": ("final_reward", "final_message")}),
         (
             "Publication",
