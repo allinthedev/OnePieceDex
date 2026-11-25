@@ -76,3 +76,27 @@ async def announce_to_spawn_channels(
     await asyncio.gather(*(deliver(channel_id) for channel_id in channel_ids))
     log.info("Announcement reached %s spawn channels, %s could not be reached.", sent, missed)
     return sent, missed
+
+
+async def main_spawn_channel(bot: "BallsDexBot", channel_id: int | None = None) -> "discord.TextChannel | None":
+    """
+    The channel an event spawns or speaks in: the one it names, else the main server's spawn channel.
+
+    Shared by everything that puts something in front of the whole dex — a boost bought in the shop, a wave of
+    the sleigh — so they all land in the same place and all behave the same way when it cannot be found.
+    """
+    if channel_id:
+        channel = bot.get_channel(channel_id)
+        return channel if isinstance(channel, discord.TextChannel) else None
+    if not settings.main_server_id:
+        log.warning("No main server is set, so there is no spawn channel to fall back on.")
+        return None
+    found = (
+        await GuildConfig.objects.filter(guild_id=settings.main_server_id, enabled=True)
+        .values_list("spawn_channel", flat=True)
+        .afirst()
+    )
+    if not found:
+        return None
+    channel = bot.get_channel(found)
+    return channel if isinstance(channel, discord.TextChannel) else None

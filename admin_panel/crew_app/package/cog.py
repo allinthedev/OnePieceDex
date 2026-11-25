@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import discord
+from asgiref.sync import sync_to_async
 from discord import app_commands
 from discord.ext import commands, tasks
 from django.db.models import Sum
@@ -14,7 +15,8 @@ from ballsdex.core.utils.checks import app_check, has_permissions
 from ballsdex.core.utils.leaderboard import EXTRA_ROWS, LEADERBOARD_SIZE, send_leaderboard
 from bd_models.models import Player
 from crew_app.models import Crew, CrewMembership, CrewWar, CrewWarEntry, CrewWarPayout, CrewWarReward, CrewWarRule
-from crew_app.payouts import ladder
+from crew_app.payouts import hand_out, ladder
+from crew_app.roles import apply_to_player, main_guild, sync_everyone
 from crew_app.scoring import (
     award,
     discord_ranking,
@@ -92,6 +94,10 @@ class CrewCog(commands.GroupCog, group_name="crew"):
 
     def __init__(self, bot: "BallsDexBot"):
         self.bot = bot
+        # wars that reached their end date with an empty ladder, so the complaint about each one
+        # is made once rather than every couple of minutes. Deliberately not written down: a
+        # restart saying it again is the point, and a ladder filled in late clears it by paying.
+        self._nothing_to_pay: set[int] = set()
 
     async def cog_load(self):
         self.announce_rewards.start()
@@ -459,6 +465,61 @@ class CrewCog(commands.GroupCog, group_name="crew"):
             return f"{MEDALS[threshold - 1]} place {threshold}"
         return f"place {threshold}"
 
+    # ── the Discord role a crew carries ─────────────────────────────────────────────────────────
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        """
+        Give a returning player their crew's role back when they join the main server.
+
+        Without this, anyone who picked a crew before ever setting foot on the main server — or who left and
+        came back — would be in a crew the server cannot see.
+        """
+        if member.bot or not settings.main_server_id or member.guild.id != settings.main_server_id:
+            return
+        player = await Player.objects.filter(discord_id=member.id).afirst()
+        if player is None:
+            return
+        try:
+            await apply_to_player(self.bot, player)
+        except Exception:
+            log.exception("crew roles: could not set up %s on joining", member.id)
+
+    @admin.command(name="syncroles")
+    @app_check(has_permissions("crew_app.change_crew"))
+    async def admin_syncroles(self, interaction: discord.Interaction["BallsDexBot"]):
+        """
+        Put everyone's crew role right on the main server, in one pass.
+        """
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        if not settings.main_server_id:
+            await interaction.followup.send(
+                "No main server is set on the settings page, so there is nowhere to give crew roles."
+            )
+            return
+        if main_guild(self.bot) is None:
+            await interaction.followup.send(
+                "The main server is set, but the bot is not on it — or has not cached it yet."
+            )
+            return
+        carrying = await Crew.objects.exclude(role_id__isnull=True).acount()
+        if not carrying:
+            await interaction.followup.send(
+                "No crew has a Discord role set. Put a role ID on a crew in the admin panel first."
+            )
+            return
+        changed, looked = await sync_everyone(self.bot)
+        log.info(
+            "%s resynced the crew roles: %s changed out of %s members.",
+            interaction.user,
+            changed,
+            looked,
+            extra={"webhook": True},
+        )
+        await interaction.followup.send(
+            f"Looked at **{looked}** members over **{carrying}** crew role(s), and changed **{changed}**."
+        )
+
     async def crew_table(self, war: CrewWar) -> discord.Embed:
         """The table of crews, which is what the leaderboard shows with no crew named."""
         crews = {crew.pk: crew async for crew in Crew.objects.all()}
@@ -497,16 +558,63 @@ class CrewCog(commands.GroupCog, group_name="crew"):
     @tasks.loop(minutes=2)
     async def announce_rewards(self):
         """
-        Say who won a war, and tell each player what they received.
+        Close the wars whose clock has run out, say who won, and tell each player what they got.
 
-        Driven by the rows the payout writes rather than by a date, because the payout is what
-        decides a war is over: an admin reads the preview, hands the rewards out, and the bot
-        speaks. Nothing in here can hand anything over — it only reports what already happened,
-        so a failure costs a message and never a reward.
+        The announcement is driven by the rows the payout writes rather than by a date, because
+        the payout is what decides a war is over. A war with Auto finish on closes itself here,
+        in the step before: the ladder goes out, and the announcement that follows in the same
+        pass then has something to speak about. A war without it waits for an admin to read the
+        preview and hand the rewards out, exactly as before.
         """
         now = timezone.now()
+        await self.finish_due_wars(now)
         await self.announce_results(now)
         await self.tell_players(now)
+
+    async def finish_due_wars(self, now) -> None:
+        """
+        Hand out the ladder of every war that asked to close itself and whose end date has passed.
+
+        The date is stamped after a payout that handed something over, never before and never
+        without. Paying twice is harmless — every rung handed to a player is a row under a unique
+        constraint, so a second pass hands nothing over — while a stamp written too early would
+        lose the whole ladder in silence. So a crash halfway through is picked up again two
+        minutes later, and so is a war whose clock ran out before anyone wrote its ladder: it
+        pays itself the moment the rungs appear, which is the whole point of asking the bot to
+        close it. The complaint about an empty ladder is therefore made once, not every pass.
+
+        `enabled` is deliberately not looked at: a war is usually closed to scoring the moment it
+        is over, and that should not be what stops it paying out.
+        """
+        due = CrewWar.objects.filter(
+            auto_finish=True, finished_at__isnull=True, ends_at__isnull=False, ends_at__lte=now
+        )
+        async for war in due:
+            try:
+                paid, already, players = await sync_to_async(hand_out)(war)
+            except Exception:
+                log.exception("crew war: %s could not pay itself out, trying again shortly", war.name)
+                continue
+            if not paid and not already:
+                # nothing to hand over, so the war is left unfinished rather than marked closed:
+                # a ladder written late still pays out on a later pass instead of needing the
+                # date cleared by hand.
+                if war.pk not in self._nothing_to_pay:
+                    self._nothing_to_pay.add(war.pk)
+                    log.warning(
+                        f"Crew war {war.name} is past its end date with nothing to hand out: its "
+                        "ladder is empty, or nobody reached the lowest rung. Nothing is announced "
+                        "either. Write the ladder and it pays itself within a couple of minutes.",
+                        extra={"webhook": True},
+                    )
+                continue
+            self._nothing_to_pay.discard(war.pk)
+            await CrewWar.objects.filter(pk=war.pk).aupdate(finished_at=now)
+            log.info(
+                f"Crew war {war.name} reached its end date and paid itself out: {paid} reward(s) "
+                f"to {players} player(s), {already} were already paid.",
+                extra={"webhook": True},
+            )
 
     async def announce_results(self, now) -> None:
         """One announcement per war, the first time any of its rewards has been paid."""

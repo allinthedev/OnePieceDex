@@ -12,6 +12,7 @@ import discord
 from discord.utils import format_dt
 from django.contrib import admin
 from django.core.cache import cache
+from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Cast
@@ -222,9 +223,26 @@ class Economy(models.Model):
         return self.name
 
 
+CREDITS_COLOUR_RE = r"^#[0-9a-fA-F]{6}$"
+CREDITS_COLOUR_HELP = (
+    "Colour of the credits line at the bottom of the card, as #RRGGBB. Left empty, the bot reads the "
+    "bottom of the finished card and writes them in black or white, which can clash with the art or "
+    "disappear into it. A special sets this for its own cards; a regime for the cards that show its "
+    "background."
+)
+
+
 class Regime(models.Model):
     name = models.CharField(max_length=64)
     background = models.ImageField(max_length=200, help_text="1428x2000 PNG image")
+    credits_colour = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+        verbose_name="credits colour",
+        validators=(RegexValidator(CREDITS_COLOUR_RE, message="Enter a hex colour such as #FFFFFF."),),
+        help_text=CREDITS_COLOUR_HELP,
+    )
 
     objects: Manager[Self] = Manager()
 
@@ -311,6 +329,14 @@ class Special(models.Model):
         "spent on a further craft, like an elemental.",
     )
     credits = models.CharField(max_length=64, help_text="Author of the special event artwork", null=True)
+    credits_colour = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+        verbose_name="credits colour",
+        validators=(RegexValidator(CREDITS_COLOUR_RE, message="Enter a hex colour such as #FFFFFF."),),
+        help_text=CREDITS_COLOUR_HELP,
+    )
 
     objects: Manager[Self] = Manager()
     enabled_objects = SpecialEnabledManager()

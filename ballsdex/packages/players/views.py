@@ -448,6 +448,7 @@ class SettingsContainer(Container):
 
         async def callback(interaction: Interaction):
             from crew_app.models import CrewMembership
+            from crew_app.roles import apply as apply_crew_role
 
             chosen = select.values[0]
             if chosen.startswith(f"{PAGE_TURN}:"):
@@ -461,6 +462,9 @@ class SettingsContainer(Container):
             else:
                 picked = next(crew for crew in crews if str(crew.pk) == chosen)
                 await CrewMembership.objects.aupdate_or_create(player=player, defaults={"crew": picked})
+            # the crew's Discord role follows the choice, on the main server and nowhere else.
+            # It never raises: a role the bot cannot hand over must not break picking a crew.
+            await apply_crew_role(interaction.client, interaction.user.id, picked)
             self._configure_crew(player, crews, picked, page)
             await interaction.response.edit_message(view=self.view)
 

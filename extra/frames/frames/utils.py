@@ -20,20 +20,27 @@ import re
 from datetime import date
 from typing import Any
 
-FRAME_KEY_RE = re.compile(r"^(\d{2}-\d{2}-\d{4})(?::(\d+))?$")
+# a dated frame: the day, optionally the special it is for, optionally the slug of its own name.
+# The name is what lets two different frames run on the same day for the same treasure.
+FRAME_KEY_RE = re.compile(r"^(\d{2}-\d{2}-\d{4})(?::(\d+))?(?:#([a-z0-9][a-z0-9_-]{0,31}))?$")
 # a named frame: lowercase, no spaces, so it is easy to type in a reward
 NAME_KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 # in place of a special ID: the treasures without special
 NO_SPECIAL = 0
 
 
-def frame_key(day: date, special_id: int | None = None) -> str:
+def frame_key(day: date, special_id: int | None = None, variant: str = "") -> str:
     """
     The key of a frame: for every treasure with `special_id` None, else for the treasures of that special, or
     without special with `NO_SPECIAL`.
+
+    `variant` is the slug of the frame's own name, and only has to be given when another frame already
+    holds the plain key for that day — which is how two frames can run on the same day.
     """
     key = day.strftime("%m-%d-%Y")
-    return key if special_id is None else f"{key}:{special_id}"
+    if special_id is not None:
+        key = f"{key}:{special_id}"
+    return f"{key}#{variant}" if variant else key
 
 
 def parse_frame_key(key: str) -> tuple[str, int | None] | None:
@@ -44,6 +51,26 @@ def parse_frame_key(key: str) -> tuple[str, int | None] | None:
     if match is None:
         return None
     return match.group(1), None if match.group(2) is None else int(match.group(2))
+
+
+def frame_variant(key: str) -> str:
+    """The name slug a dated key carries, empty when it carries none."""
+    match = FRAME_KEY_RE.match(key)
+    return (match.group(3) or "") if match else ""
+
+
+def frames_of_day(capacity_logic: Any, day: date, special_id: int | None) -> list[dict]:
+    """
+    Every frame stored for this day and this scope, however many there are.
+
+    The scope is the whole of it: `None` means the frames of every treasure, a special's ID means the ones
+    of that special, `NO_SPECIAL` the ones of the treasures without special. Two frames in the same scope
+    on the same day are both returned, which is what makes a draw between them possible.
+    """
+    if not isinstance(capacity_logic, dict):
+        return []
+    wanted = (day.strftime("%m-%d-%Y"), special_id)
+    return [entry for key, entry in capacity_logic.items() if is_frame_entry(entry) and parse_frame_key(key) == wanted]
 
 
 def is_frame_entry(value: Any) -> bool:
@@ -106,17 +133,21 @@ def frames_depend_on_special(capacity_logic: Any, day: date) -> bool:
 
 def pick_frame(capacity_logic: Any, special_id: int | None, day: date) -> dict | None:
     """
-    The frame a new treasure of this special, None without special, gets on this day: the frame of its special, or
-    of the treasures without special, first, else the frame of every treasure. Each one is only given with its own
-    chance.
+    The frame a new treasure of this special, None without special, gets on this day.
+
+    The frames of its special, or of the treasures without special, come first; the frames of every
+    treasure only get a look in afterwards. Within one of those two groups the order is shuffled, so that
+    when several frames run on the same day none of them is quietly favoured by how its key sorts — each
+    is then offered its own chance in turn, and the first to land is the one given.
     """
     if not isinstance(capacity_logic, dict):
         return None
-    keys = [frame_key(day, NO_SPECIAL if special_id is None else special_id), frame_key(day)]
-    for key in keys:
-        entry = capacity_logic.get(key)
-        if is_frame_entry(entry) and _roll(entry):
-            return entry
+    for scope in (NO_SPECIAL if special_id is None else special_id, None):
+        candidates = frames_of_day(capacity_logic, day, scope)
+        random.shuffle(candidates)
+        for entry in candidates:
+            if _roll(entry):
+                return entry
     return None
 
 

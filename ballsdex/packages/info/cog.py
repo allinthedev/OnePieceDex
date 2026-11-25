@@ -136,8 +136,9 @@ class Info(commands.Cog):
         )
         if settings.artist_credits_url:
             dex_credits += (
-                f"\n\N{ARTIST PALETTE} Artworks are made by talented artists, "
-                f"[check out the artist credits]({settings.artist_credits_url})!"
+                f"\n\N{ARTIST PALETTE} Artworks, berries and a hand along the way come from the "
+                f"[OPdex contributor community]({settings.artist_credits_url}) — artists, patrons "
+                f"and helpers alike!"
             )
         embed.description = (
             f"{' '.join(str(x) for x in balls)}\n"

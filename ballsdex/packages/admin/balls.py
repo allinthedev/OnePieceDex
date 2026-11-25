@@ -86,13 +86,14 @@ def _frame_of_the_day(ball: Ball, special_id: int | None) -> dict | None:
     The frame running today for this treasure: the one of the picked special first, then the one of every
     treasure. The chance is ignored, an admin asking for a frame always gets it.
     """
-    from frames.utils import NO_SPECIAL, frame_key, is_frame_entry
+    from frames.utils import NO_SPECIAL, frames_of_day
 
     today = date.today()
-    for key in (frame_key(today, NO_SPECIAL if special_id is None else special_id), frame_key(today)):
-        entry = ball.capacity_logic.get(key)
-        if is_frame_entry(entry):
-            return entry
+    # several frames can run on the same day now, so the first of the narrower scope is taken
+    for scope in (NO_SPECIAL if special_id is None else special_id, None):
+        found = frames_of_day(ball.capacity_logic, today, scope)
+        if found:
+            return found[0]
     return None
 
 
@@ -131,6 +132,28 @@ async def _spawn_frame(ctx: commands.Context[BallsDexBot], flags: SpawnFlags) ->
     more = f"\n…and {len(choices) - 25} more." if len(choices) > 25 else ""
     await ctx.send(f"No frame {which} for {ball.country}. Available here:\n{listed}{more}", ephemeral=True)
     return False, None
+
+
+async def _no_such_frame(
+    ctx: commands.Context[BallsDexBot], ball: Ball, asked: str, special: Special | None
+) -> None:
+    """
+    Tell an admin the frame they named is not on this treasure, and list what is.
+
+    Shared wording with the spawn, so naming a frame that does not exist reads the same whichever
+    command it was.
+    """
+    special_id = None if _is_frame_special(special) else (special.pk if special else None)
+    choices = _frame_choices(ball, special_id)
+    if not choices:
+        await ctx.send(
+            f"No frame `{asked}` for {ball.country}, and it has no frame at all for these settings.",
+            ephemeral=True,
+        )
+        return
+    listed = "\n".join(f"- {choice}" for choice in choices[:25])
+    more = f"\n…and {len(choices) - 25} more." if len(choices) > 25 else ""
+    await ctx.send(f"No frame `{asked}` for {ball.country}. Available here:\n{listed}{more}", ephemeral=True)
 
 
 def _random_from(countryball_cls: type["BallSpawnView"], bot: BallsDexBot, pool: list[Ball]):
@@ -323,10 +346,19 @@ async def give(ctx: commands.Context[BallsDexBot], user: discord.User, *, flags:
     """
     await ctx.defer(ephemeral=True)
 
+    frame = None
+    if flags.frame_name:
+        frame = frame_entry(flags.countryball, flags.frame_name)
+        if frame is None:
+            await _no_such_frame(ctx, flags.countryball, flags.frame_name, flags.special)
+            return
+
     player, created = await Player.objects.aget_or_create(discord_id=user.id)
     instance = await BallInstance.objects.acreate(
         ball=flags.countryball,
         player=player,
+        # left empty, the frames package gives whatever frame runs today, as it already did
+        extra_data=dict(frame) if frame else {},
         attack_bonus=(
             flags.attack_bonus
             if flags.attack_bonus is not None
@@ -339,16 +371,17 @@ async def give(ctx: commands.Context[BallsDexBot], user: discord.User, *, flags:
         ),
         special=flags.special,
     )
+    framed = f" • Frame: `{frame.get('name') or flags.frame_name}`" if frame else ""
     await ctx.send(
         f"`{flags.countryball.country}` (`{instance.pk:0X}`) "
         f"{settings.collectible_name} was successfully given to "
         f"`{user}`.\nSpecial: `{flags.special.name if flags.special else None}` • ATK: "
-        f"`{instance.attack_bonus:+d}` • HP:`{instance.health_bonus:+d}` "
+        f"`{instance.attack_bonus:+d}` • HP:`{instance.health_bonus:+d}`{framed}"
     )
     log.info(
         f"{ctx.author} gave {settings.collectible_name} {flags.countryball.country} (`{instance.pk:0X}`) "
         f"to {user}. (Special={flags.special.name if flags.special else None} "
-        f"ATK={instance.attack_bonus:+d} HP={instance.health_bonus:+d}).",
+        f"ATK={instance.attack_bonus:+d} HP={instance.health_bonus:+d}{framed}).",
         extra={"webhook": True},
     )
 

@@ -202,7 +202,9 @@ async def taken_today(war: CrewWar, player_id: int, rule: CrewWarRule) -> int:
     return taken["total"] or 0
 
 
-async def award(war: CrewWar, player_id: int, crew_id: int, points: int, *, note: str = "") -> CrewWarEntry:
+async def award(
+    war: CrewWar, player_id: int, crew_id: int, points: int, *, note: str = "", source: str = Source.MANUAL
+) -> CrewWarEntry:
     """
     Write points no rule paid for: a tournament the staff ran, a King of the Seas, an apology.
 
@@ -213,7 +215,7 @@ async def award(war: CrewWar, player_id: int, crew_id: int, points: int, *, note
         war=war,
         crew_id=crew_id,
         player_id=player_id,
-        source=Source.MANUAL,
+        source=source,
         points=points,
         note=note[:128],
     )

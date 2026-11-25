@@ -24,7 +24,19 @@ from bd_models.models import Ball, BallInstance, balls, frame_entry, groups, mar
 from settings.models import settings
 from settings.utils import format_currency
 
-from .models import BonusMode, EventPass, Reward, RewardChoice, RewardGrant, RewardKind, RewardLine, RewardMode, Source
+from . import wallet
+from .models import (
+    BonusMode,
+    EventPass,
+    PassWalletEntry,
+    Reward,
+    RewardChoice,
+    RewardGrant,
+    RewardKind,
+    RewardLine,
+    RewardMode,
+    Source,
+)
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot
@@ -37,6 +49,7 @@ class GrantResult:
     lines: list[str] = field(default_factory=list)
     instances: list[BallInstance] = field(default_factory=list)
     berries: int = 0
+    tokens: int = 0
     # set when the reward is a choice: nothing was handed out yet, the player still has to pick
     choice_id: int | None = None
     choice_label: str = ""
@@ -169,7 +182,7 @@ def _grant(
             # cards" should not sometimes hand over the berries instead of a card
             treasures = []
             for line in lines:
-                if line.kind == RewardKind.BERRIES:
+                if line.kind in (RewardKind.BERRIES, RewardKind.TOKENS):
                     _give_line(result, line, player_id, event_pass, reward, server_id, channel_id)
                 else:
                     treasures.append(line)
@@ -194,6 +207,21 @@ def _give_line(
     channel_id: int | None,
     ball: Ball | None = None,
 ) -> None:
+    if line.kind == RewardKind.TOKENS:
+        # a pass that never named a currency has no wallet to credit, so the line is skipped rather
+        # than handing out something nothing can be spent on
+        if not line.amount or not event_pass.currency_name:
+            return
+        wallet.adjust(
+            player_id,
+            event_pass.pk,
+            line.amount,
+            reason=PassWalletEntry.Reason.PASS,
+            description=f"{event_pass.name}: {reward.name}"[: PassWalletEntry.DESCRIPTION_MAX_LENGTH],
+        )
+        result.tokens += line.amount
+        result.lines.append(wallet.format_tokens(event_pass, line.amount))
+        return
     if line.kind == RewardKind.BERRIES:
         if not line.amount:
             return
@@ -214,6 +242,58 @@ def _give_line(
     result.lines.append(_line_text(line, ball))
 
 
+def give_bundle(
+    player_id: int,
+    event_pass: EventPass,
+    reward: Reward,
+    *,
+    server_id: int | None = None,
+    channel_id: int | None = None,
+) -> GrantResult:
+    """
+    Hand a bundle over at once, with no "given only once" row behind it.
+
+    This is what a shop sells: a player may buy the same bundle again tomorrow, which is the very thing the
+    `RewardGrant` of a quest or a tier exists to stop. A bundle set to let the player pick is drawn at random
+    here instead — a purchase is not a claim, so there is no pending choice to come back to.
+    """
+    result = GrantResult()
+    with transaction.atomic():
+        lines = list(reward.lines.all())
+        if reward.mode == RewardMode.ALL:
+            for line in lines:
+                # a pool line in this mode gives nothing through `_grant`: the pass only ever expands a pool
+                # when it draws from one or offers it. Behind an advent door or on a shop shelf, "one of these
+                # nine" has to mean something, so one is drawn here rather than silently handing over nothing.
+                drawn = None
+                if line.is_pool:
+                    pool = pool_balls(line)
+                    drawn = random.choice(pool) if pool else None
+                _give_line(result, line, player_id, event_pass, reward, server_id, channel_id, ball=drawn)
+            return result
+        treasures = []
+        for line in lines:
+            if line.kind in (RewardKind.BERRIES, RewardKind.TOKENS):
+                _give_line(result, line, player_id, event_pass, reward, server_id, channel_id)
+            else:
+                treasures.append(line)
+        for line, ball in _drawn(treasures, reward.pick or 1):
+            _give_line(result, line, player_id, event_pass, reward, server_id, channel_id, ball=ball)
+    return result
+
+
+async def agive_bundle(
+    player_id: int,
+    event_pass: EventPass,
+    reward: Reward,
+    *,
+    server_id: int | None = None,
+    channel_id: int | None = None,
+) -> GrantResult:
+    """Async wrapper around [`give_bundle`][]."""
+    return await sync_to_async(give_bundle)(player_id, event_pass, reward, server_id=server_id, channel_id=channel_id)
+
+
 def _line_text(line: RewardLine, ball: Ball | None) -> str:
     """
     What a line gave. A pool line says the treasure it landed on rather than describing the pool again.
@@ -232,7 +312,7 @@ def _options(lines: list[RewardLine]) -> list[tuple[RewardLine, Ball | None]]:
     """
     found: list[tuple[RewardLine, Ball | None]] = []
     for line in lines:
-        if line.kind == RewardKind.BERRIES or not line.is_pool:
+        if line.kind in (RewardKind.BERRIES, RewardKind.TOKENS) or not line.is_pool:
             found.append((line, None))
             continue
         found.extend((line, ball) for ball in pool_balls(line))
@@ -412,8 +492,9 @@ def reward_preview(reward: Reward | None, bot: BallsDexBot | None = None) -> str
         return " + ".join(parts)
     # berries are given whatever the mode, so they are listed apart from what is picked or drawn
     lines = list(reward.lines.all())
-    berries = [line for line in lines if line.kind == RewardKind.BERRIES]
-    treasures = [line for line in lines if line.kind != RewardKind.BERRIES]
+    given_whatever = (RewardKind.BERRIES, RewardKind.TOKENS)
+    berries = [line for line in lines if line.kind in given_whatever]
+    treasures = [line for line in lines if line.kind not in given_whatever]
     # a pool is worth naming by its size: "1 of 9 Straw Hats" says more than "1x Straw Hats"
     options = sum(len(pool_balls(line)) if line.is_pool else 1 for line in treasures)
     if len(treasures) == 1 and treasures[0].is_pool:
@@ -423,5 +504,7 @@ def reward_preview(reward: Reward | None, bot: BallsDexBot | None = None) -> str
     if options > 1:
         verb = "your pick" if reward.mode == RewardMode.CHOICE else "at random"
         what = f"{reward.pick} of {options} {what} ({verb})"
-    given = [format_currency(line.amount, False, bot) for line in berries]
+    given = [
+        format_currency(line.amount, False, bot) if line.kind == RewardKind.BERRIES else str(line) for line in berries
+    ]
     return " + ".join([*given, what] if what else given)

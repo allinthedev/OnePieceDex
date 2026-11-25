@@ -21,10 +21,13 @@ from django.utils.safestring import mark_safe
 
 from .integrations import INTEGRATIONS, check_integrations
 from .models import (
+    CrewPassWallet,
     EventPass,
     Measure,
     PassRequirement,
     PassTier,
+    PassWallet,
+    PassWalletEntry,
     PlayerPass,
     PlayerQuest,
     Quest,
@@ -545,6 +548,59 @@ class RewardGrantAdmin(admin.ModelAdmin):
         field.name
         for field in RewardGrant._meta.fields  # a grant is a record of what was given, never edited
     )
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+
+@admin.register(PassWallet)
+class PassWalletAdmin(admin.ModelAdmin):
+    """
+    What each player holds of a pass's own currency.
+
+    The balance is read-only here on purpose: every movement is supposed to go through the ledger, so correcting
+    one by hand would leave the balance and its history disagreeing. Use the action below instead, which writes
+    both.
+    """
+
+    list_display = ("player", "event_pass", "balance", "earned", "updated_at")
+    list_filter = ("event_pass",)
+    search_fields = ("player__discord_id",)
+    list_select_related = ("player", "event_pass")
+    readonly_fields = ("player", "event_pass", "balance", "earned", "updated_at")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+
+@admin.register(CrewPassWallet)
+class CrewPassWalletAdmin(admin.ModelAdmin):
+    """The pot each crew has been given, out of its members' own wallets."""
+
+    list_display = ("crew", "event_pass", "balance", "received", "updated_at")
+    list_filter = ("event_pass", "crew")
+    list_select_related = ("crew", "event_pass")
+    readonly_fields = ("crew", "event_pass", "balance", "received", "updated_at")
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+
+@admin.register(PassWalletEntry)
+class PassWalletEntryAdmin(admin.ModelAdmin):
+    """
+    Every movement of every wallet, player's and crew's.
+
+    Each row carries the balance it left behind, so replaying a wallet in order has to reproduce what it holds
+    now. A jump between one row's balance and the next means currency moved somewhere that bypassed the ledger.
+    """
+
+    list_display = ("created_at", "wallet", "crew_wallet", "amount", "balance_after", "reason", "description")
+    list_filter = ("reason", "created_at", "wallet__event_pass")
+    search_fields = ("wallet__player__discord_id", "description")
+    list_select_related = ("wallet", "wallet__player", "crew_wallet", "crew_wallet__crew")
+    readonly_fields = tuple(field.name for field in PassWalletEntry._meta.fields)
+    date_hierarchy = "created_at"
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
