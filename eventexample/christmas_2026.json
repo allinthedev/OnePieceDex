@@ -1,0 +1,650 @@
+{
+  "name": "Christmas 2026",
+  "emoji": "🎄",
+  "description": "Snow on the deck, a parcel with your name on it, and a sleigh that will not fly until every crew has filled it. Four weeks, forty quests, and a whole month of snowflakes to spend.",
+  "colour": "#C8102E",
+  "starts_at": "2026-12-01T00:01:00Z",
+  "ends_at": "2026-12-31T23:59:00Z",
+  "claim_until": "2027-01-07T23:59:00Z",
+  "position": 0,
+  "card_special": "Christmas 2026",
+  "currency_name": "Snowflakes",
+  "currency_emoji": "❄️",
+  "daily_currency": 10,
+  "final_reward": {
+    "cards": [
+      "Hie Hie no Mi (Chilly Chilly)"
+    ],
+    "currency": 150
+  },
+  "final_message": "Every door opened, every parcel wrapped, every crew fed. The sleigh is yours — merry Christmas, and mind the ice. 🎄",
+  "notes": "Christmas 2026 event pass. Before this goes live: (1) the Christmas 2026 special needs its artwork and a rarity above 0, or no catch-a-Christmas quest can be done; (2) the same special has to be picked in the Secret Santa, the advent calendar, the sleigh and the shop in the admin; (3) position 0 makes this the pass /pass view opens in December, so raise it if another event should win. The pass loads as a DRAFT and only staff see it in /pass view until it is set Active: that is the admin-only state to test it in. The quests that drive the event features count uses of a slash command, so note that advent catchup does NOT count towards the advent open quests. A player who catches up on missed days will not finish Twenty Doors, which is why it asks for 20 and not 25. The two Secret Santa wrapping quests are both optional on purpose: giving a card (santa gift) and paying in snowflakes (santa pay) are two paths to the same thing, and neither should be the only way to finish a tier. Five quests are hidden (A Flake of Your Own, Blizzard Runner, Full Stocking, Snowflake Baron, Nobody Asked You To): players only see them once completed, and they never count towards finishing a tier. Snowflakes handed out: about 1880 over the whole pass, plus 10 a day from the daily, against shop boosts priced 100 to 250.",
+  "tiers": [
+    {
+      "name": "The First Snow",
+      "emoji": "🌨️",
+      "description": "The sea goes quiet, the rigging goes white, and a calendar nobody remembers hanging turns up on the mast. Open it.",
+      "reward": {
+        "cards": [
+          "Yuki Yuki no Mi (Snow Snow)"
+        ],
+        "currency": 40
+      },
+      "announce": "public",
+      "completion_message": "The first snow has settled, and the Snow Snow fruit is yours. ❄️",
+      "quests": [
+        {
+          "name": "Hung on the Mast",
+          "emoji": "🗓️",
+          "description": "Find out what the fuss is about: open the advent calendar with /advent view.",
+          "type": "command",
+          "command": "advent view",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 10
+          }
+        },
+        {
+          "name": "The First Door",
+          "emoji": "🚪",
+          "description": "One door a day, no cheating. Open today's with /advent open.",
+          "type": "command",
+          "command": "advent open",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 15
+          }
+        },
+        {
+          "name": "Snow Patrol",
+          "emoji": "🔭",
+          "description": "Somebody has to keep watch in this weather. Catch 20 treasures.",
+          "type": "catch",
+          "goal": 20,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 20,
+            "berries": 1500
+          }
+        },
+        {
+          "name": "Something in the Snow",
+          "emoji": "🎁",
+          "description": "It is not a seagull. Catch a Christmas 2026 treasure.",
+          "type": "catch",
+          "special": "Christmas 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "cards": [
+              "Wapol"
+            ],
+            "currency": 25
+          }
+        },
+        {
+          "name": "Letter to Santa",
+          "emoji": "✉️",
+          "description": "Sign your name on the list: join the Secret Santa with /santa join.",
+          "type": "command",
+          "command": "santa join",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 25
+          }
+        },
+        {
+          "name": "Three Wishes",
+          "emoji": "⭐",
+          "description": "Tell your Santa what you actually want: fill all three slots of your wishlist with /santa wish.",
+          "type": "command",
+          "command": "santa wish",
+          "goal": 3,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 20
+          }
+        },
+        {
+          "name": "Warming Up",
+          "emoji": "☕",
+          "description": "Claim your daily berries three days in a row — the snowflakes come with them.",
+          "type": "currency_streak",
+          "goal": 3,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 20
+          }
+        },
+        {
+          "name": "Load the Sleigh",
+          "emoji": "🛷",
+          "description": "The sleigh is empty and it is not going anywhere. Put a treasure in it with /sleigh give.",
+          "type": "command",
+          "command": "sleigh give",
+          "announce": "ephemeral",
+          "reward": {
+            "cards": [
+              "Monet"
+            ],
+            "currency": 20
+          }
+        },
+        {
+          "name": "Gift Wrapped",
+          "emoji": "🎀",
+          "description": "Give 3 treasures to people on your friend list. No strings, no trade.",
+          "type": "give_treasures",
+          "goal": 3,
+          "with_friend": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 15,
+            "berries": 2000
+          }
+        },
+        {
+          "name": "A Flake of Your Own",
+          "emoji": "❄️",
+          "description": "Nobody told you to hoard them. Five Christmas treasures already sitting in your collection.",
+          "type": "own_treasures",
+          "goal": 5,
+          "special": "Christmas 2026",
+          "hidden": true,
+          "announce": "ephemeral",
+          "completion_message": "Five already. December has barely started.",
+          "reward": {
+            "currency": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "Winter Island",
+      "emoji": "🏔️",
+      "description": "The log pose settles on an island of snow, a castle on stilts and a doctor who shoots at visitors. Climb it anyway.",
+      "reward": {
+        "cards": [
+          "Kuzan"
+        ],
+        "currency": 60
+      },
+      "announce": "public",
+      "completion_message": "The drum mountains are behind you, and an admiral of ice walks down with you. 🧊",
+      "requirements": [
+        "finish_previous",
+        {
+          "date": "2026-12-08T00:01:00Z"
+        }
+      ],
+      "quests": [
+        {
+          "name": "Drum Rock Climb",
+          "emoji": "🥁",
+          "description": "Straight up, no ropes: catch 50 treasures.",
+          "type": "catch",
+          "goal": 50,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 30,
+            "berries": 3000
+          }
+        },
+        {
+          "name": "Snowstorm",
+          "emoji": "🌬️",
+          "description": "They come down thick up here. Catch 3 Christmas 2026 treasures.",
+          "type": "catch",
+          "goal": 3,
+          "special": "Christmas 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "cards": [
+              "Dr. Kureha"
+            ],
+            "currency": 30
+          }
+        },
+        {
+          "name": "Eight Doors Down",
+          "emoji": "🚪",
+          "description": "Keep at the calendar: open 8 doors in all.",
+          "type": "command",
+          "command": "advent open",
+          "goal": 8,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 40
+          }
+        },
+        {
+          "name": "Shopping Trip",
+          "emoji": "🛍️",
+          "description": "Snowflakes are for spending: buy something with /shop buy.",
+          "type": "command",
+          "command": "shop buy",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 25
+          }
+        },
+        {
+          "name": "Hot Chocolate",
+          "emoji": "🍫",
+          "description": "A week of it, every morning. Claim your daily berries seven days in a row.",
+          "type": "currency_streak",
+          "goal": 7,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 35
+          }
+        },
+        {
+          "name": "Secret Keeper",
+          "emoji": "🤫",
+          "description": "Find out whose Santa you are with /santa target. Tell nobody.",
+          "type": "command",
+          "command": "santa target",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 20
+          }
+        },
+        {
+          "name": "The Quack Doctor",
+          "emoji": "🌸",
+          "description": "He cured the island and nobody thanked him. Catch Doctor Hiriluk.",
+          "type": "catch",
+          "ball": "Doctor Hiriluk",
+          "announce": "ephemeral",
+          "reward": {
+            "berries": 4000,
+            "currency": 20
+          }
+        },
+        {
+          "name": "Ice Breaker",
+          "emoji": "🤝",
+          "description": "Nobody crosses a winter island alone: complete 3 trades with friends.",
+          "type": "trade",
+          "goal": 3,
+          "with_friend": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 25,
+            "berries": 2500
+          }
+        },
+        {
+          "name": "Loaded Sleigh",
+          "emoji": "🛷",
+          "description": "Your crew is counting: put 5 treasures in the sleigh.",
+          "type": "command",
+          "command": "sleigh give",
+          "goal": 5,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 40
+          }
+        },
+        {
+          "name": "Blizzard Runner",
+          "emoji": "💨",
+          "description": "You never even saw them land. Five treasures caught in under seven seconds.",
+          "type": "catch",
+          "goal": 5,
+          "max_catch_seconds": 7,
+          "hidden": true,
+          "announce": "ephemeral",
+          "completion_message": "Faster than the snow. The sleigh noticed.",
+          "reward": {
+            "currency": 60
+          }
+        }
+      ]
+    },
+    {
+      "name": "The Great Feast",
+      "emoji": "🍖",
+      "description": "Whole Cake Island hears there is a party and invites itself. Candy, packs, merchants and a sleigh that still is not full.",
+      "reward": {
+        "cards": [
+          "Charlotte Linlin (Big Mom)"
+        ],
+        "currency": 80
+      },
+      "announce": "public",
+      "completion_message": "The table is cleared, the Emperor is fed, and she came back with you. 🍰",
+      "requirements": [
+        "finish_previous",
+        {
+          "date": "2026-12-15T00:01:00Z"
+        }
+      ],
+      "quests": [
+        {
+          "name": "Feast Preparations",
+          "emoji": "🍽️",
+          "description": "This many mouths need this many treasures: catch 100.",
+          "type": "catch",
+          "goal": 100,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 50,
+            "berries": 6000
+          }
+        },
+        {
+          "name": "Candy Rain",
+          "emoji": "🍬",
+          "description": "It is snowing sweets. Catch 6 Christmas 2026 treasures.",
+          "type": "catch",
+          "goal": 6,
+          "special": "Christmas 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "cards": [
+              "Charlotte Pudding"
+            ],
+            "currency": 50
+          }
+        },
+        {
+          "name": "Halfway Down the Calendar",
+          "emoji": "🚪",
+          "description": "Fifteen doors open, sixteen to go.",
+          "type": "command",
+          "command": "advent open",
+          "goal": 15,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 50
+          }
+        },
+        {
+          "name": "Crew Delivery",
+          "emoji": "🛷",
+          "description": "The sleigh takes everything you can carry: 15 treasures given to it.",
+          "type": "command",
+          "command": "sleigh give",
+          "goal": 15,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 60
+          }
+        },
+        {
+          "name": "Wrap the Parcel",
+          "emoji": "📦",
+          "description": "Somebody is waiting on you: fill your Secret Santa parcel with a card, using /santa gift.",
+          "type": "command",
+          "command": "santa gift",
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 75
+          }
+        },
+        {
+          "name": "Paid in Snow",
+          "emoji": "❄️",
+          "description": "No card to spare? Buy your way out of it: fill your parcel with /santa pay.",
+          "type": "command",
+          "command": "santa pay",
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 25
+          }
+        },
+        {
+          "name": "Sweets Merchant",
+          "emoji": "🧁",
+          "description": "Buy 3 items from the merchant. It is the season for it.",
+          "type": "merchant_buy",
+          "goal": 3,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 30
+          }
+        },
+        {
+          "name": "A Pile of Presents",
+          "emoji": "🎁",
+          "description": "Buy 5 packs, any packs. Shake them first.",
+          "type": "pack_buy",
+          "goal": 5,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 30,
+            "berries": 3000
+          }
+        },
+        {
+          "name": "Christmas Shopping",
+          "emoji": "💸",
+          "description": "Nobody saves in December: spend 100,000 berries, anywhere.",
+          "type": "spend_currency",
+          "measure": "amount",
+          "goal": 100000,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 40
+          }
+        },
+        {
+          "name": "The Candy Man",
+          "emoji": "🍭",
+          "description": "He licks everything he owns. Catch Charlotte Perospero.",
+          "type": "catch",
+          "ball": "Charlotte Perospero",
+          "announce": "ephemeral",
+          "reward": {
+            "cards": [
+              "Streusen"
+            ],
+            "berries": 5000
+          }
+        },
+        {
+          "name": "Twelve Days",
+          "emoji": "🔔",
+          "description": "Claim your daily berries twelve days in a row.",
+          "type": "currency_streak",
+          "goal": 12,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 50
+          }
+        },
+        {
+          "name": "Full Stocking",
+          "emoji": "🧦",
+          "description": "Twenty Christmas treasures in one collection. Somebody has been busy.",
+          "type": "own_treasures",
+          "goal": 20,
+          "special": "Christmas 2026",
+          "hidden": true,
+          "announce": "ephemeral",
+          "completion_message": "Twenty. The stocking does not close any more.",
+          "reward": {
+            "currency": 100
+          }
+        }
+      ]
+    },
+    {
+      "name": "Christmas Morning",
+      "emoji": "🎅",
+      "description": "The parcels can be opened, the sleigh is heavy, and whatever is left over falls out of it on the twenty-sixth. Last week.",
+      "reward": {
+        "cards": [
+          "Tony Tony Chopper"
+        ],
+        "currency": 120
+      },
+      "announce": "public",
+      "completion_message": "The reindeer is aboard and the parcels are all open. That is Christmas done properly. 🦌",
+      "requirements": [
+        "finish_previous",
+        {
+          "date": "2026-12-22T00:01:00Z"
+        }
+      ],
+      "quests": [
+        {
+          "name": "Christmas Morning",
+          "emoji": "🎁",
+          "description": "It has your name on it. Open your Secret Santa parcel with /santa open.",
+          "type": "command",
+          "command": "santa open",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 100
+          }
+        },
+        {
+          "name": "Twenty Doors",
+          "emoji": "🚪",
+          "description": "Twenty doors opened on the day they were meant to be. Catching up later does not count.",
+          "type": "command",
+          "command": "advent open",
+          "goal": 20,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 100
+          }
+        },
+        {
+          "name": "Snow Mountain",
+          "emoji": "⛰️",
+          "description": "Ten of them, caught by your own hand. Catch 10 Christmas 2026 treasures.",
+          "type": "catch",
+          "goal": 10,
+          "special": "Christmas 2026",
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "cards": [
+              "Charlotte Smoothie"
+            ],
+            "currency": 80
+          }
+        },
+        {
+          "name": "The Last Mile",
+          "emoji": "🧭",
+          "description": "The month asks for one more push: catch 150 treasures.",
+          "type": "catch",
+          "goal": 150,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 70,
+            "berries": 10000
+          }
+        },
+        {
+          "name": "Something Rare Under the Tree",
+          "emoji": "💎",
+          "description": "Only trophies now: catch 3 treasures of T40 or rarer.",
+          "type": "catch",
+          "goal": 3,
+          "max_rarity": 40,
+          "mandatory": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 80
+          }
+        },
+        {
+          "name": "Generous Soul",
+          "emoji": "🤲",
+          "description": "Give 10 treasures to friends before the year runs out.",
+          "type": "give_treasures",
+          "goal": 10,
+          "with_friend": true,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 60
+          }
+        },
+        {
+          "name": "Boxing Day",
+          "emoji": "📦",
+          "description": "Whatever the sleigh could not carry falls out of it. Catch 5 Christmas 2026 treasures from the twenty-sixth onwards.",
+          "type": "catch",
+          "goal": 5,
+          "special": "Christmas 2026",
+          "starts_at": "2026-12-26T00:01:00Z",
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 80,
+            "berries": 8000
+          }
+        },
+        {
+          "name": "All Month Long",
+          "emoji": "🔥",
+          "description": "Never missed a single morning: a daily berry streak of twenty-five days.",
+          "type": "currency_streak",
+          "goal": 25,
+          "announce": "ephemeral",
+          "reward": {
+            "currency": 100
+          }
+        },
+        {
+          "name": "Snowflake Baron",
+          "emoji": "👑",
+          "description": "Thirty Christmas treasures. At this point the snow works for you.",
+          "type": "own_treasures",
+          "goal": 30,
+          "special": "Christmas 2026",
+          "hidden": true,
+          "announce": "ephemeral",
+          "completion_message": "Thirty. Nobody is out-collecting you this winter.",
+          "reward": {
+            "cards": [
+              "Charlotte Katakuri"
+            ],
+            "currency": 100
+          }
+        },
+        {
+          "name": "Nobody Asked You To",
+          "emoji": "🫶",
+          "description": "Twenty-five treasures given away to friends over one December. Nobody asked, and nobody will forget.",
+          "type": "give_treasures",
+          "goal": 25,
+          "with_friend": true,
+          "hidden": true,
+          "announce": "ephemeral",
+          "completion_message": "Twenty-five presents given. Merry Christmas from the whole crew. 🎄",
+          "reward": {
+            "cards": [
+              "Charlotte Daifuku"
+            ],
+            "currency": 120
+          }
+        }
+      ]
+    }
+  ]
+}

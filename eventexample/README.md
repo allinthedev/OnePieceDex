@@ -7,6 +7,11 @@ Each JSON file here describes a whole event pass (its tiers, quests and rewards)
 - `halloween_2026.json`: four weekly Thriller Bark tiers, October 1 to 31, 2026. The Halloween 2026
   special has a rarity of 0: raise it for the event, or no "catch a Halloween treasure" quest can be
   finished.
+- `christmas_2026.json`: four weekly tiers from December 1 to 31, 2026, and the pass that carries the
+  **Snowflakes** the Secret Santa, the advent calendar, the sleigh and the event shop all run on. Its
+  quests ask for the event's own commands (`/advent open`, `/santa join`, `/sleigh give`, `/shop
+  buy`), so they only count once those packages are loaded. The Christmas 2026 special has a rarity
+  of 0: raise it for the event, or no "catch a Christmas treasure" quest can be finished.
 - `awakened_fruit_craft.json` + its two `.sql` scripts: not a pass, the Awakened Fruit recipes of the
   collectors, see the last section.
 
@@ -42,6 +47,17 @@ Edit the file and load it again (steps 1 to 3): the draft is updated in place, n
   admin, or move it back to draft first.
 - Quests or tiers removed from the file are not deleted from the pass: delete them in the admin.
 
+For Christmas 2026 specifically, before it goes Active:
+
+- The **Christmas 2026** special needs its artwork and a rarity above 0, and the same special has to
+  be picked in the Secret Santa, the advent calendar, the sleigh and the shop in the admin.
+- The pass is at `position: 0`, so it is the one `/pass view` opens in December. Raise it if another
+  event should win.
+- Only one pass at a time should carry a currency, or `/shop` has to ask which one: delete or clear
+  the currency of any test pass left over.
+- `/advent catchup` does **not** count towards the `advent open` quests, which is why the last tier
+  asks for 20 doors and not 25.
+
 For the Birthday Voyage specifically:
 
 - `"token": "venustoken"` is a placeholder: put the name of the real Birthday token and reload.
@@ -63,6 +79,8 @@ in UTC: `"2026-10-09T00:01:00Z"`.
 | `emoji`, `description`, `colour` | Look of the pass (`"#FDDF28"`) |
 | `starts_at`, `ends_at`, `claim_until` | Dates. `claim_until` is optional |
 | `token` | The treasure given by `"tokens"` in the rewards |
+| `currency_name`, `currency_emoji` | The pass's own currency, like `"Snowflakes"` and `"❄️"`. Left out, the pass has no currency and its event shop cannot open |
+| `daily_currency` | How much of that currency `/daily` hands out on top of the berries while the pass is live |
 | `card_special` | The special put on every card given as a reward (`"Birthday"`) |
 | `final_reward`, `final_message` | Given once every tier is finished |
 | `position` | Which pass `/pass view` opens when no pass is named: the lowest position among those running. An event that is over never hides one that is running, whatever its position |
@@ -104,6 +122,7 @@ instead let the player pick, or draw for them:
 | Key | Meaning |
 | --- | --- |
 | `cards`, `tokens`, `berries` | Named treasures, pass tokens, and berries |
+| `currency` | The pass's own currency, so `"currency": 25` is 25 Snowflakes. Needs `currency_name` on the pass |
 | `pool` | A treasure taken from everything matching it, instead of a named one. One object, or a list of them |
 | `mode` | `"all"` (default, give everything), `"choice"` (the player picks) or `"random"` (drawn for them) |
 | `pick` | How many are picked or drawn, default 1 |
@@ -118,8 +137,8 @@ exclusions. Rarity works as everywhere else: lower is rarer, so `"min_rarity": 2
 ```
 
 `cards` works with the three modes too, so a hand-picked list is enough for "pick one of these three" — a pool is
-only needed when the list would be long or is better described by a filter. **Berries are never part of a pick or a
-draw**: they are always given, and only the treasures are picked or drawn, so `{"mode": "random", "pick": 2,
+only needed when the list would be long or is better described by a filter. **Berries and the pass currency are never part of a
+pick or a draw**: they are always given, and only the treasures are picked or drawn, so `{"mode": "random", "pick": 2,
 "cards": [...], "berries": 500}` hands over the 500 berries and two of the cards.
 
 A choice is not given right away: it is set aside for the player, who picks it from a menu on `/pass view` whenever
