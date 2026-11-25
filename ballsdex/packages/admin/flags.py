@@ -57,9 +57,7 @@ class SpawnFlags(FlagConverter):
         description="Force the countryball to have a special attribute when caught."
     )
     frame_name: FrameTransform | None = flag(
-        description="Spawn it with this frame, picked from the list. With special=Frame and none picked, "
-        "the frame of the day.",
-        aliases=["frame"],
+        description="Frame to spawn it with. special=Frame alone gives the day's frame.", aliases=["frame"]
     )
     atk_bonus: int | None = flag(description="Force the countryball to have a specific attack bonus when caught.")
     hp_bonus: int | None = flag(description="Force the countryball to have a specific health bonus when caught.")
@@ -68,10 +66,7 @@ class SpawnFlags(FlagConverter):
 class GiveBallFlags(FlagConverter):
     countryball: BallTransform = flag(positional=True, description="The countryball you want to give")
     special: SpecialTransform | None = flag(description="A special event to set to this card")
-    frame_name: FrameTransform | None = flag(
-        description="Give it wearing this frame, picked from the list.",
-        aliases=["frame"],
-    )
+    frame_name: FrameTransform | None = flag(description="Frame to give it.", aliases=["frame"])
     health_bonus: int | None = flag(description="Force a specific health bonus percentage")
     attack_bonus: int | None = flag(description="Force a specific attack bonus percentage")
 

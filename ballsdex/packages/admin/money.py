@@ -7,9 +7,6 @@ from currency_app.ledger import aadjust_money_to, reset_all_balances
 from currency_app.models import BerryTransaction
 from discord.ext import commands
 from django.db import connection
-from eventpass_app import wallet
-from eventpass_app.models import EventPass, PassWalletEntry
-from eventpass_app.transformers import EventPassTransform
 from pack_models.models import PackResource
 
 from ballsdex.core.bot import BallsDexBot
@@ -266,74 +263,5 @@ async def resetdaily(
     log.info(
         f"{ctx.author} ({ctx.author.id}) cleared the daily cooldown of {user} ({user.id}) "
         f"(streak={streak}, packs={packs})",
-        extra={"webhook": True},
-    )
-
-
-@money.command()
-@checks.has_permissions("bd_models.change_player")
-async def tokens(
-    ctx: commands.Context[BallsDexBot], user: discord.User, amount: int, event_pass: EventPassTransform | None = None
-):
-    """
-    Give a player the currency of an event pass, or take it back with a negative amount.
-
-    Parameters
-    ----------
-    user: discord.User
-        Who to credit.
-    amount: int
-        How much. A negative number takes it back.
-    event_pass: EventPass
-        Which event. Needed only when more than one pass has a currency of its own.
-    """
-    await ctx.defer(ephemeral=True)
-    if not amount:
-        await ctx.send("That would move nothing.", ephemeral=True)
-        return
-
-    if event_pass is None:
-        carrying = [item async for item in EventPass.objects.exclude(currency_name="").order_by("position", "pk")]
-        if not carrying:
-            await ctx.send("No event pass has a currency of its own.", ephemeral=True)
-            return
-        if len(carrying) > 1:
-            names = ", ".join(f"**{item.name}**" for item in carrying)
-            await ctx.send(f"Several passes have a currency: name the one you mean. ({names})", ephemeral=True)
-            return
-        event_pass = carrying[0]
-    elif not event_pass.currency_name:
-        await ctx.send(f"**{event_pass.name}** has no currency of its own.", ephemeral=True)
-        return
-
-    player, _ = await Player.objects.aget_or_create(discord_id=user.id)
-    try:
-        left = await wallet.aadjust(
-            player.pk,
-            event_pass.pk,
-            amount,
-            reason=PassWalletEntry.Reason.ADMIN,
-            description=f"By {ctx.author}"[: PassWalletEntry.DESCRIPTION_MAX_LENGTH],
-        )
-    except wallet.NotEnough as error:
-        await ctx.send(f"{user.mention} only holds {wallet.format_tokens(event_pass, error.held)}.", ephemeral=True)
-        return
-
-    moved = wallet.format_tokens(event_pass, abs(amount))
-    verb = "Gave" if amount > 0 else "Took back"
-    await ctx.send(
-        f"{verb} {moved} {'to' if amount > 0 else 'from'} {user.mention}. "
-        f"They now hold {wallet.format_tokens(event_pass, left)}.",
-        ephemeral=True,
-    )
-    log.info(
-        "%s %s %s %s %s on %s, leaving %s.",
-        ctx.author,
-        verb.lower(),
-        moved,
-        "to" if amount > 0 else "from",
-        user,
-        event_pass.name,
-        left,
         extra={"webhook": True},
     )

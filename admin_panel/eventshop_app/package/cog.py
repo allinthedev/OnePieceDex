@@ -289,6 +289,8 @@ def _buy(
 class EventShopCog(commands.GroupCog, name="Event shop", group_name="shop"):
     """Spend what an event pass hands out."""
 
+    admin = app_commands.Group(name="admin", description="Staff commands for the event shop.")
+
     def __init__(self, bot: "BallsDexBot"):
         self.bot = bot
 
@@ -553,6 +555,68 @@ class EventShopCog(commands.GroupCog, name="Event shop", group_name="shop"):
             f"Given {wallet.format_tokens(event_pass, amount)} to **{membership.crew.label}**. "
             f"Its pot now holds {wallet.format_tokens(event_pass, pot)}. A gift is one way: it cannot be taken "
             f"back."
+        )
+
+    @admin.command(name="tokens")
+    @app_commands.describe(
+        user="Who to credit.",
+        amount="How much. A negative number takes it back.",
+        event_pass="The event, when more than one pass has a currency.",
+    )
+    async def admin_tokens(
+        self,
+        interaction: discord.Interaction["BallsDexBot"],
+        user: discord.User,
+        amount: app_commands.Range[int, -1_000_000_000, 1_000_000_000],
+        event_pass: EventPassTransform | None = None,
+    ):
+        """
+        Give a player an event's currency, or take it back.
+        """
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        if not await is_staff(interaction):
+            await interaction.followup.send("That one is for staff.")
+            return
+        if not amount:
+            await interaction.followup.send("That would move nothing.")
+            return
+        event_pass, problem = await only_shop(event_pass)
+        if event_pass is None:
+            await interaction.followup.send(problem)
+            return
+
+        player, _ = await Player.objects.aget_or_create(discord_id=user.id)
+        try:
+            left = await wallet.aadjust(
+                player.pk,
+                event_pass.pk,
+                amount,
+                reason=PassWalletEntry.Reason.ADMIN,
+                description=f"By {interaction.user}"[: PassWalletEntry.DESCRIPTION_MAX_LENGTH],
+            )
+        except wallet.NotEnough as error:
+            await interaction.followup.send(
+                f"{user.mention} only holds {wallet.format_tokens(event_pass, error.held)}."
+            )
+            return
+
+        moved = wallet.format_tokens(event_pass, abs(amount))
+        verb = "Gave" if amount > 0 else "Took back"
+        await interaction.followup.send(
+            f"{verb} {moved} {'to' if amount > 0 else 'from'} {user.mention}. "
+            f"They now hold {wallet.format_tokens(event_pass, left)}.",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        log.info(
+            "%s %s %s %s %s on %s, leaving %s.",
+            interaction.user,
+            verb.lower(),
+            moved,
+            "to" if amount > 0 else "from",
+            user,
+            event_pass.name,
+            left,
+            extra={"webhook": True},
         )
 
     @app_commands.command()
