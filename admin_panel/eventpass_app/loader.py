@@ -58,6 +58,9 @@ PASS_KEYS = {
     "notes",
     "token",
     "card_special",
+    "currency_name",
+    "currency_emoji",
+    "daily_currency",
     "access",
     "access_logic",
     "access_message",
@@ -101,7 +104,7 @@ QUEST_KEYS = {
     "notes",
     "reward",
 }
-REWARD_KEYS = {"cards", "tokens", "berries", "mode", "pick", "offer", "pool", "frame_key"}
+REWARD_KEYS = {"cards", "tokens", "currency", "berries", "mode", "pick", "offer", "pool", "frame_key"}
 POOL_KEYS = {"group", "regime", "economy", "min_rarity", "max_rarity", "exclude", "quantity"}
 
 # quest settings whose name in the file differs from the model field
@@ -218,6 +221,9 @@ class PassLoader:
                 "main_server_id": data.get("main_server_id"),
                 "main_server_only": data.get("main_server_only", False),
                 "final_message": data.get("final_message", ""),
+                "currency_name": data.get("currency_name", ""),
+                "currency_emoji": data.get("currency_emoji", ""),
+                "daily_currency": data.get("daily_currency", 0),
                 "position": data.get("position", 0),
                 "notes": data.get("notes", ""),
             },
@@ -524,6 +530,12 @@ class PassLoader:
             )
             if counted_in:
                 self._tokens[counted_in] += tokens
+        if currency := spec.get("currency", 0):
+            if not self.data.get("currency_name"):
+                self.errors.append(
+                    f'Reward "{name}" hands out the pass currency, but the pass sets no "currency_name".'
+                )
+            lines.append(RewardLine(reward=reward, kind=RewardKind.TOKENS, amount=currency))
         if berries := spec.get("berries", 0):
             lines.append(RewardLine(reward=reward, kind=RewardKind.BERRIES, amount=berries))
         for position, line in enumerate(lines, start=1):
