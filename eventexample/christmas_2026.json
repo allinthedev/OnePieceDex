@@ -229,9 +229,9 @@
         {
           "name": "Shopping Trip",
           "emoji": "🛍️",
-          "description": "Snowflakes are for spending: buy something with /shop buy.",
+          "description": "Snowflakes are for spending: buy a boost from the Christmas shop with /merchant global buy.",
           "type": "command",
-          "command": "shop buy",
+          "command": "merchant global buy",
           "mandatory": true,
           "announce": "ephemeral",
           "reward": {

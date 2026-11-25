@@ -21,7 +21,6 @@ from django.utils.safestring import mark_safe
 
 from .integrations import INTEGRATIONS, check_integrations
 from .models import (
-    CrewPassWallet,
     EventPass,
     Measure,
     PassRequirement,
@@ -298,6 +297,15 @@ class EventPassAdmin(admin.ModelAdmin):
                 "fields": ("access_logic", "access_message"),
             },
         ),
+        (
+            "Its own currency",
+            {
+                "description": "Name a currency and the pass gets a wallet of its own, which opens its event "
+                "shop. Leave the name empty and it has none: /shop stays shut for this pass, whatever is on "
+                "sale in it.",
+                "fields": ("currency_name", "currency_emoji", "daily_currency"),
+            },
+        ),
         ("End of the pass", {"fields": ("final_reward", "final_message")}),
         (
             "Publication",
@@ -571,20 +579,6 @@ class PassWalletAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
-
-
-@admin.register(CrewPassWallet)
-class CrewPassWalletAdmin(admin.ModelAdmin):
-    """The pot each crew has been given, out of its members' own wallets."""
-
-    list_display = ("crew", "event_pass", "balance", "received", "updated_at")
-    list_filter = ("event_pass", "crew")
-    list_select_related = ("crew", "event_pass")
-    readonly_fields = ("crew", "event_pass", "balance", "received", "updated_at")
-
-    def has_add_permission(self, request: HttpRequest) -> bool:
-        return False
-
 
 @admin.register(PassWalletEntry)
 class PassWalletEntryAdmin(admin.ModelAdmin):

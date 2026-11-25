@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils import timezone
@@ -59,7 +60,17 @@ class MerchantSettings(models.Model):
 
 
 class MerchantItem(models.Model):
+    class Kind(models.TextChoices):
+        TREASURE = "treasure", "A treasure"
+        BOOST = "boost", "A boost for the whole server"
+
     name = models.CharField(unique=True, max_length=64)
+    kind = models.CharField(
+        max_length=8,
+        choices=Kind.choices,
+        default=Kind.TREASURE,
+        help_text="What the player walks away with. A boost needs no treasure and makes no card.",
+    )
     prize = models.PositiveIntegerField(null=True, blank=True)
     start_date = models.DateTimeField(
         help_text="Start time of the item. If blank, starts immediately", null=True, blank=True
@@ -68,10 +79,37 @@ class MerchantItem(models.Model):
         help_text="End time of the item. If blank, the item is permanent", null=True, blank=True
     )
     rarity = models.FloatField(help_text="Value between 0 and 1, determine if a item is rarest than other")
-    ball = models.ForeignKey(Ball, on_delete=models.CASCADE)
-    ball_id: int
+    ball = models.ForeignKey(Ball, null=True, blank=True, on_delete=models.CASCADE)
+    ball_id: int | None
     special = models.ForeignKey(Special, null=True, blank=True, on_delete=models.SET_NULL)
     special_id: int | None
+    boost = models.ForeignKey(
+        "eventshop_app.Boost",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="merchant_items",
+        help_text="The boost this item starts, for an item that sells one. Boosts run on the main server "
+        "and never need an event to be running.",
+    )
+    boost_id: int | None
+    event_pass = models.ForeignKey(
+        "eventpass_app.EventPass",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="merchant_items",
+        help_text="Which wallet the price below is taken from. Only read when there is a price in a "
+        "currency.",
+    )
+    event_pass_id: int | None
+    price_currency = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="price in the pass currency",
+        help_text="What it costs in the event pass's own currency, like Snowflakes. Fill this one OR the "
+        "berry price, never both: to sell the same thing both ways, make the item twice.",
+    )
     stock = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -90,8 +128,19 @@ class MerchantItem(models.Model):
     created_at = models.DateTimeField(editable=False, auto_now_add=True)
 
     @property
-    def cached_ball(self) -> "Ball":
+    def cached_ball(self) -> "Ball | None":
+        if self.ball_id is None:
+            return None
         return balls.get(self.ball_id) or self.ball
+
+    @property
+    def is_boost(self) -> bool:
+        return self.kind == self.Kind.BOOST
+
+    @property
+    def paid_in_currency(self) -> bool:
+        """Whether this item is paid out of an event pass's wallet rather than in berries."""
+        return bool(self.price_currency and self.event_pass_id)
 
     @property
     def cached_special(self) -> "Special | None":
@@ -124,6 +173,35 @@ class MerchantItem(models.Model):
         if self.stock <= 0:
             return "Sold out"
         return f"{self.stock} left"
+
+    def clean(self):
+        """
+        Keep an item coherent: what it sells matches its kind, and it has exactly one price.
+
+        Two prices would mean asking the player which to pay with, which is a menu nobody asked for. Selling
+        the same boost both ways is done by making the item twice, which also lets the two have their own
+        stock and their own limits.
+        """
+        errors: dict[str, str] = {}
+        if self.kind == self.Kind.BOOST:
+            if self.boost_id is None:
+                errors["boost"] = "An item that sells a boost has to name one."
+            if self.ball_id is not None:
+                errors["ball"] = "A boost gives no treasure. Leave this empty."
+        else:
+            if self.ball_id is None:
+                errors["ball"] = "An item that sells a treasure has to name one."
+            if self.boost_id is not None:
+                errors["boost"] = "Only an item of kind boost sells a boost. Leave this empty."
+        if self.prize and self.price_currency:
+            errors["price_currency"] = (
+                "Give it a price in berries or in a pass's currency, not both. To sell it both ways, make "
+                "the item a second time."
+            )
+        if self.price_currency and self.event_pass_id is None:
+            errors["event_pass"] = "A price in a currency needs the pass whose wallet it comes out of."
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self) -> str:
         return self.name

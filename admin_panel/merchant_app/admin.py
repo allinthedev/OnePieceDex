@@ -24,11 +24,20 @@ class MerchantSettingsAdmin(admin.ModelAdmin):
 
 @admin.register(MerchantItem)
 class MerchantItemAdmin(admin.ModelAdmin):
-    autocomplete_fields = ("ball", "special")
+    autocomplete_fields = ("ball", "special", "boost", "event_pass")
     save_on_top = True
     readonly_fields = ("hotel_value",)
     fieldsets = [
-        (None, {"fields": ["name", "prize", "hotel_value", "rarity", "stock", "per_player_limit"]}),
+        (None, {"fields": ["name", "kind", "rarity", "stock", "per_player_limit"]}),
+        (
+            "What it costs",
+            {
+                "description": "Fill the berry price OR the currency price, never both. To sell the same "
+                "thing both ways, make the item a second time: each copy then has its own stock and its own "
+                "limit per player.",
+                "fields": ["prize", "event_pass", "price_currency"],
+            },
+        ),
         (
             "Time range",
             {
@@ -38,20 +47,48 @@ class MerchantItemAdmin(admin.ModelAdmin):
                 "at the specified time.",
             },
         ),
-        ("Rewards", {"fields": ["ball", "special"]}),
+        (
+            "Rewards",
+            {
+                "description": "A treasure item needs a treasure, a boost item needs a boost. The other one "
+                "stays empty.",
+                "fields": ["ball", "special", "hotel_value", "boost"],
+            },
+        ),
     ]
 
-    list_display = ("name", "prize", "rarity", "stock", "per_player_limit", "ball_name", "sale_value", "special_name")
+    list_display = (
+        "name",
+        "kind",
+        "prize",
+        "currency_price",
+        "rarity",
+        "stock",
+        "per_player_limit",
+        "ball_name",
+        "sale_value",
+        "special_name",
+    )
     list_editable = ("rarity", "prize", "stock")
-    list_filter = ("created_at", "start_date", "end_date")
-    list_select_related = ("ball", "special")
+    list_filter = ("kind", "event_pass", "created_at", "start_date", "end_date")
+    list_select_related = ("ball", "special", "boost", "event_pass")
 
     search_fields = ["name", "pk"]
 
     @admin.display(description="Hotel value")
     def sale_value(self, obj: MerchantItem):
         """What the Hotel pays for the treasure behind this item, to price it against."""
+        if obj.ball_id is None:
+            return "-"
         return treasure_value.short_label(obj.ball.rarity)
+
+    @admin.display(description="In currency")
+    def currency_price(self, obj: MerchantItem):
+        if not obj.price_currency:
+            return "-"
+        event_pass = obj.event_pass
+        label = f"{event_pass.currency_emoji} {event_pass.currency_name}".strip() if event_pass else "?"
+        return f"{obj.price_currency:,} {label}".strip()
 
     @admin.display(description="Hotel de Vente")
     def hotel_value(self, obj: MerchantItem | None):
@@ -62,6 +99,8 @@ class MerchantItemAdmin(admin.ModelAdmin):
 
     @admin.display(description="Name of the ball")
     def ball_name(self, obj: MerchantItem):
+        if obj.ball_id is None:
+            return obj.boost.name if obj.boost_id else "-"
         return obj.ball.country
 
     @admin.display(description="Name of the special")

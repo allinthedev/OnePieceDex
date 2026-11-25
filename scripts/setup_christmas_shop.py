@@ -1,9 +1,15 @@
 """
-The Christmas shop: the boosts players can buy, and what they cost in the pass's own currency.
+The Christmas boosts, and the merchant shop that sells them.
 
-Nothing here is priced in berries on purpose — the shop is the one place the event's currency is worth
-something, and letting berries in would make the whole pass optional. The offers carry a berry price field all
-the same, so you can open that door later from the admin panel without touching this.
+Boosts are sold by the merchant, not by the event pass. That is on purpose: a boost needs no event to be
+running, so putting it behind an event shop would have made it unbuyable the rest of the year. The merchant
+already has stock, limits per player and a happy hour, and its listing is a name and a price, which is
+exactly what a boost is.
+
+Nothing here is priced in berries. The currency is the one place the event's snowflakes are worth something,
+and letting berries in would make the whole pass optional. To sell the same boost for berries as well, copy
+the item in the admin and fill the berry price instead of the currency one — an item carries one price or
+the other, never both, and the two copies then have their own stock and their own limit per player.
 
 Run it against the stack:
 
@@ -16,18 +22,22 @@ That is a dry run: it says what it would make and writes nothing. To make it hap
 Run it as often as you like. It matches on names, so a second run updates what it made the first time rather
 than making a second copy — which also means renaming a boost here creates a new one and leaves the old.
 
-The pass it attaches to is the one named in PASS, or the only pass that has a currency when there is just one:
+The pass whose currency pays for it is the one named in PASS, or the only pass that has a currency when
+there is just one. SHOP names the merchant shop, and SPECIAL the special the spirit boost raises:
 
-    docker compose exec -T -e GO=1 -e PASS="Noel 2026" admin-panel python3 -m django shell < scripts/...
+    docker compose exec -T -e GO=1 -e PASS="Christmas 2026" -e SPECIAL="Christmas 2026" \
+        admin-panel python3 -m django shell < scripts/setup_christmas_shop.py
 """
 
 import os
 
 from eventpass_app.models import EventPass
-from eventshop_app.models import Boost, BoostKind, ShopOffer
+from eventshop_app.models import Boost, BoostKind
+from merchant_app.models import GlobalShop, MerchantItem
 
 GO = bool(os.environ.get("GO"))
 WANTED_PASS = os.environ.get("PASS", "").strip()
+SHOP_NAME = os.environ.get("SHOP", "Christmas shop").strip()
 # the special whose chance the "Christmas spirit" boost raises. Set it to your Christmas special.
 SPECIAL_NAME = os.environ.get("SPECIAL", "").strip()
 
@@ -44,19 +54,19 @@ carrying = list(EventPass.objects.exclude(currency_name="").order_by("position",
 if WANTED_PASS:
     event_pass = next((item for item in carrying if item.name == WANTED_PASS), None)
     if event_pass is None:
-        names = ", ".join(item.name for item in carrying) or "none"
-        raise SystemExit(f"No pass named {WANTED_PASS!r} has a currency. Passes with one: {names}")
-elif len(carrying) == 1:
-    event_pass = carrying[0]
+        raise SystemExit(f"No pass named {WANTED_PASS!r} has a currency.")
 elif not carrying:
-    raise SystemExit("No event pass has a currency of its own. Give one a currency name first.")
-else:
+    raise SystemExit("No pass has a currency yet. Give one a currency name in the admin and run this again.")
+elif len(carrying) > 1:
     names = ", ".join(item.name for item in carrying)
     raise SystemExit(f"Several passes have a currency, so name the one you mean with PASS. ({names})")
+else:
+    event_pass = carrying[0]
 
 currency = f"{event_pass.currency_emoji} {event_pass.currency_name}".strip()
 say(f"Pass    : {event_pass.name}")
 say(f"Currency: {currency}")
+say(f"Shop    : {SHOP_NAME}")
 
 # ── the special the spirit boost raises ─────────────────────────────────────────────────────────
 
@@ -76,7 +86,7 @@ say()
 # ── what is sold ────────────────────────────────────────────────────────────────────────────────
 
 # The numbers below are a starting point, not a balance. Everything is editable in the admin panel, and the
-# daily claim is what sets the pace: at 50 a day, the cheapest boost here is two days of simply turning up.
+# pass is what sets the pace: the quests hand out about 1880 snowflakes over December, plus the daily claim.
 BOOSTS = [
     {
         "name": "Blizzard",
@@ -122,37 +132,47 @@ BOOSTS = [
     },
 ]
 
-for position, spec in enumerate(BOOSTS, start=1):
+shop = None
+if GO:
+    shop, made_shop = GlobalShop.objects.get_or_create(name=SHOP_NAME)
+    say(f"Shop {SHOP_NAME!r} {'created' if made_shop else 'reused'}.")
+    say()
+
+for spec in BOOSTS:
     spec = dict(spec)
     price = spec.pop("price")
     per_player = spec.pop("per_player")
     name = spec.pop("name")
     say(f"  {spec['emoji']} {name} — {price} {event_pass.currency_name}")
     say(f"      {spec['description']}")
-    if GO:
-        boost, made = Boost.objects.update_or_create(name=name, defaults={**spec, "enabled": True, "announce": True})
-        ShopOffer.objects.update_or_create(
-            event_pass=event_pass,
-            name=name,
-            defaults={
-                "kind": ShopOffer.Kind.BOOST,
-                "boost": boost,
-                "reward": None,
-                "emoji": spec["emoji"],
-                "description": spec["description"],
-                "price": price,
-                # left empty on purpose: this shop does not take berries
-                "price_berries": None,
-                "per_player": per_player,
-                "position": position,
-                "enabled": True,
-            },
-        )
-        say(f"      {'created' if made else 'updated'}")
+    if not GO:
+        continue
+
+    boost, made = Boost.objects.update_or_create(name=name, defaults={**spec, "enabled": True, "announce": True})
+    item, made_item = MerchantItem.objects.update_or_create(
+        name=name,
+        defaults={
+            "kind": MerchantItem.Kind.BOOST,
+            "boost": boost,
+            "ball": None,
+            "special": None,
+            # the merchant's random rotation weighs items by rarity. Zero keeps a boost out of it, so it is
+            # only ever sold from the shop below, where everyone sees the same list
+            "rarity": 0,
+            "event_pass": event_pass,
+            "price_currency": price,
+            # left empty on purpose: this shop does not take berries
+            "prize": None,
+            "per_player_limit": per_player or None,
+        },
+    )
+    shop.items.add(item)
+    say(f"      boost {'created' if made else 'updated'}, item {'created' if made_item else 'updated'}")
 
 say()
 if GO:
-    say("Done. The offers are live in /shop as soon as the pass is.")
+    say(f"Done. The boosts are on sale with /merchant global shop {SHOP_NAME} and /merchant global buy.")
+    say("They need no event to be running: only enough currency in the buyer's wallet.")
 else:
     say("Dry run: nothing was written. Re-run with GO=1 to make it happen.")
 

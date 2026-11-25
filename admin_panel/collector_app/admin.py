@@ -37,8 +37,17 @@ class CollectorSettingsAdmin(admin.ModelAdmin):
 
 @admin.register(CollectorTierLevel)
 class CollectorTierLevelAdmin(admin.ModelAdmin):
-    list_display = ("name", "position", "emoji", "special", "claimable", "monitored", "collector_count")
-    list_editable = ("position", "claimable", "monitored")
+    list_display = (
+        "name",
+        "position",
+        "emoji",
+        "special",
+        "claimable",
+        "repeatable",
+        "monitored",
+        "collector_count",
+    )
+    list_editable = ("position", "claimable", "repeatable", "monitored")
     autocomplete_fields = ("special",)
     search_fields = ("name",)
 
