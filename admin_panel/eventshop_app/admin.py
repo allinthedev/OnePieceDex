@@ -70,13 +70,33 @@ class ShopOfferAdmin(admin.ModelAdmin):
     """
 
     save_on_top = True
-    list_display = ("name", "event_pass", "kind", "price", "state", "sold", "stock", "per_player", "enabled")
+    list_display = (
+        "name",
+        "event_pass",
+        "kind",
+        "price",
+        "price_berries",
+        "state",
+        "sold",
+        "stock",
+        "per_player",
+        "enabled",
+    )
     list_filter = ("event_pass", "kind", "enabled", "from_crew_pot")
     search_fields = ("name", "description")
     autocomplete_fields = ("boost", "reward")
     readonly_fields = ("sold", "created_at")
     fieldsets = [
-        (None, {"fields": ["event_pass", "name", "emoji", "description", "kind", "price", "position", "enabled"]}),
+        (None, {"fields": ["event_pass", "name", "emoji", "description", "kind", "position", "enabled"]}),
+        (
+            "What it costs",
+            {
+                "fields": ["price", "price_berries"],
+                "description": "Fill one, or both. An offer priced both ways asks the player which "
+                "they want to pay with; one priced a single way just takes it. An offer with neither "
+                "price cannot be saved.",
+            },
+        ),
         (
             "What it sells",
             {
@@ -150,11 +170,11 @@ class ActiveBoostAdmin(admin.ModelAdmin):
 class ShopPurchaseAdmin(admin.ModelAdmin):
     """Every sale, so a stock can be audited and a refund explained."""
 
-    list_display = ("created_at", "offer", "player", "crew", "price", "summary")
-    list_filter = ("offer__event_pass", "offer", "crew", "created_at")
+    list_display = ("created_at", "offer", "player", "crew", "price", "paid_with", "summary")
+    list_filter = ("offer__event_pass", "offer", "paid_with", "crew", "created_at")
     search_fields = ("player__discord_id", "summary")
     list_select_related = ("offer", "player", "crew")
-    readonly_fields = ("offer", "player", "crew", "price", "summary", "created_at")
+    readonly_fields = ("offer", "player", "crew", "price", "paid_with", "summary", "created_at")
     date_hierarchy = "created_at"
 
     def has_add_permission(self, request: "HttpRequest") -> bool:

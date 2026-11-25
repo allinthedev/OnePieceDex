@@ -11,7 +11,7 @@ from collector_app.models import CollectorInstance, CollectorRequirement, Collec
 from currency_app.ledger import adjust_money
 from currency_app.models import BerryTransaction
 from django.db import transaction
-from django.db.models import Case, Count, Q, When
+from django.db.models import Case, Count, Max, Q, When
 from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 
@@ -201,10 +201,21 @@ def tier_requirements(tier: CollectorTier | CollectorInstance, *, include_consum
     return list(queryset.order_by("amount", "pk"))
 
 
-def is_claimed(player_id: int, tier: CollectorTier) -> bool:
+def claimed_copies(player_id: int, tier: CollectorTier) -> int:
+    """How many of this tier the player holds right now, revoked ones left out."""
     return CollectorInstance.objects.filter(
         player_id=player_id, collector_id=tier.collector_id, level_id=tier.level_id, revoked_at__isnull=True
-    ).exists()
+    ).count()
+
+
+def is_claimed(player_id: int, tier: CollectorTier) -> bool:
+    """
+    Whether this tier is closed to the player. A repeatable tier never is: what stops them is running
+    out of the treasures it asks for, not having claimed it before.
+    """
+    if tier.level.repeatable:
+        return False
+    return claimed_copies(player_id, tier) > 0
 
 
 def claim_tier(player_id: int, tier_id: int, server_id: int | None) -> ClaimResult:
@@ -276,10 +287,19 @@ def claim_tier(player_id: int, tier_id: int, server_id: int | None) -> ClaimResu
             # without this, the frames package would give it the frame running today, like it does for a catch
             mark_no_frame(card)
         card.save(force_insert=True)
+        # a repeatable tier numbers its claims, so several can sit side by side under the unique
+        # constraint that stops a tier claimed once from being claimed twice
+        taken = (
+            CollectorInstance.objects.filter(
+                player_id=player_id, collector_id=tier.collector_id, level_id=tier.level_id
+            ).aggregate(highest=Max("copy"))["highest"]
+            or 0
+        )
         CollectorInstance.objects.create(
             player_id=player_id,
             collector_id=tier.collector_id,
             level_id=tier.level_id,
+            copy=taken + 1 if tier.level.repeatable else 1,
             ball_instance=card,
             claimed_at=now,
             monitored=tier.level.monitored,

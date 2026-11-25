@@ -141,6 +141,7 @@ class BerryTransaction(models.Model):
         BATTLE_PAYOUT = "battle_payout", "Battle winnings"
 
         ADVENT_CATCH_UP = "advent_catch_up", "Advent door bought open"
+        EVENT_SHOP = "event_shop", "Bought in the event shop"
 
     player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="berry_transactions")
     amount = models.BigIntegerField(help_text="Signed: positive credits the player, negative debits them.")

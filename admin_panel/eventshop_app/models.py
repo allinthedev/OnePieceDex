@@ -146,7 +146,19 @@ class ShopOffer(models.Model):
         "exactly like a card a tier gives.",
     )
     reward_id: int | None
-    price = models.PositiveBigIntegerField(help_text="In the pass's own currency.")
+    price = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="price in currency",
+        help_text="In the pass's own currency. Leave empty and it cannot be bought that way.",
+    )
+    price_berries = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="price in berries",
+        help_text="In berries. Leave empty and it cannot be bought that way. An offer priced both ways lets "
+        "the player pick.",
+    )
     position = models.PositiveSmallIntegerField(default=0, help_text="Offers are listed from the lowest.")
     enabled = models.BooleanField(default=True)
     starts_at = models.DateTimeField(
@@ -182,6 +194,15 @@ class ShopOffer(models.Model):
         return f"{self.emoji} {self.name}".strip()
 
     @property
+    def ways_to_pay(self) -> list[str]:
+        """Which currencies this offer takes, in the order they are offered."""
+        return [kind for kind, amount in (("tokens", self.price), ("berries", self.price_berries)) if amount]
+
+    def cost(self, paid_with: str) -> int:
+        """What it costs in one currency, zero when it does not take that one."""
+        return int((self.price if paid_with == "tokens" else self.price_berries) or 0)
+
+    @property
     def sold_out(self) -> bool:
         return self.stock is not None and self.sold >= self.stock
 
@@ -201,6 +222,11 @@ class ShopOffer(models.Model):
         return True
 
     def clean(self):
+        if not self.price and not self.price_berries:
+            raise ValidationError(
+                "Give it a price in the pass's currency, in berries, or in both. An offer with neither "
+                "cannot be bought at all."
+            )
         if self.kind == self.Kind.BOOST and self.boost_id is None:
             raise ValidationError({"boost": "An offer selling a boost has to name one."})
         if self.kind == self.Kind.REWARD and self.reward_id is None:
@@ -209,7 +235,8 @@ class ShopOffer(models.Model):
             raise ValidationError({"ends_at": "The end of the sale comes after its start."})
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.price:,})"
+        prices = " / ".join(f"{amount:,}" for amount in (self.price, self.price_berries) if amount)
+        return f"{self.name} ({prices})"
 
 
 class ActiveBoost(models.Model):
@@ -275,6 +302,12 @@ class ShopPurchase(models.Model):
         help_text="Set when the pot paid rather than the player.",
     )
     price = models.PositiveBigIntegerField(help_text="What it cost at the time.")
+    paid_with = models.CharField(
+        max_length=8,
+        choices=[("tokens", "The pass's currency"), ("berries", "Berries")],
+        default="tokens",
+        help_text="Which currency paid for it.",
+    )
     summary = models.CharField(max_length=256, blank=True, default="", help_text="What the buyer got.")
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
 

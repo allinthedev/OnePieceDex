@@ -72,6 +72,12 @@ class CollectorTierLevel(models.Model):
         help_text="Cards of this tier claimed from now on are taken back if their owner stops meeting the "
         "requirements for too long. Cards claimed before this option was enabled are never watched.",
     )
+    repeatable = models.BooleanField(
+        default=False,
+        help_text="Let players claim this tier again, as many times as they can meet its "
+        "requirements. Meant for a tier whose requirements are consumed, like the elementals: each "
+        "claim costs the cards again. Left off, a tier is claimed once and never again.",
+    )
 
     @property
     def cached_special(self) -> Special | None:
@@ -279,6 +285,11 @@ class CollectorInstance(models.Model):
     )
     ball_instance_id: int | None
     claimed_at = models.DateTimeField(null=True, blank=True)
+    copy = models.PositiveIntegerField(
+        default=1,
+        help_text="Which claim this is, for a tier that can be claimed again. Always 1 on a tier claimed "
+        "once, which is what keeps a double click from claiming twice.",
+    )
     monitored = models.BooleanField(
         default=False, help_text="Whether the card is taken back if its owner stops meeting the requirements."
     )
@@ -302,7 +313,9 @@ class CollectorInstance(models.Model):
         db_table = "collectorinstance"
         constraints = [
             models.UniqueConstraint(
-                fields=("player", "collector", "level"),
+                # `copy` is what lets a repeatable tier hold several at once while a tier claimed
+                # once keeps exactly the protection it had: its copy is always 1
+                fields=("player", "collector", "level", "copy"),
                 condition=Q(revoked_at__isnull=True),
                 name="collectorinstance_active_unique",
             )

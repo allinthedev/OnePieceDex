@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 import discord
 from asgiref.sync import sync_to_async
 from crew_app.models import CrewMembership
+from currency_app.ledger import adjust_money
+from currency_app.models import BerryTransaction
 from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import format_dt
@@ -123,13 +125,74 @@ class ShopOfferTransformer(TTLModelTransformer[ShopOffer]):
 ShopOfferTransform = app_commands.Transform[ShopOffer, ShopOfferTransformer]
 
 
+def price_text(event_pass: EventPass, offer: ShopOffer) -> str:
+    """Every way this offer can be paid for, in one line."""
+    parts = []
+    if offer.price:
+        parts.append(wallet.format_tokens(event_pass, offer.price))
+    if offer.price_berries:
+        parts.append(f"{offer.price_berries:,} berries")
+    return " · ".join(parts) or "no price"
+
+
+class PayWith(discord.ui.View):
+    """
+    Which currency to pay an offer with, when it takes both.
+
+    Only the player who asked can press, and a button they cannot afford is shown disabled rather than
+    hidden — knowing an offer takes berries, and how many, is worth more than a tidy row of buttons.
+    """
+
+    def __init__(self, user_id: int, event_pass: EventPass, offer: ShopOffer, tokens: int, berries: int):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.chosen: str | None = None
+        self.add_item(
+            self._button("tokens", wallet.format_tokens(event_pass, offer.price), tokens >= (offer.price or 0))
+        )
+        self.add_item(
+            self._button("berries", f"{offer.price_berries:,} berries", berries >= (offer.price_berries or 0))
+        )
+
+    def _button(self, kind: str, label: str, affordable: bool) -> discord.ui.Button:
+        button: discord.ui.Button = discord.ui.Button(
+            label=label,
+            style=discord.ButtonStyle.blurple if affordable else discord.ButtonStyle.grey,
+            disabled=not affordable,
+        )
+
+        async def pressed(interaction: discord.Interaction):
+            self.chosen = kind
+            await interaction.response.defer()
+            self.stop()
+
+        button.callback = pressed
+        return button
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This one is not yours to answer.", ephemeral=True)
+            return False
+        return True
+
+
 class Refused(Exception):
     """A purchase that cannot go through, with the line to show the buyer."""
 
 
-def _buy(offer_id: int, player_id: int, crew_id: int | None, server_id: int | None, channel_id: int | None) -> str:
+def _buy(
+    offer_id: int,
+    player_id: int,
+    crew_id: int | None,
+    server_id: int | None,
+    channel_id: int | None,
+    paid_with: str = "tokens",
+) -> str:
     """
     Take the money and hand the goods over, both or neither. Returns the line shown to the buyer.
+
+    `paid_with` says which of the two prices to charge. An offer priced a single way is charged that way
+    whatever is asked for, so a stale button cannot take the wrong currency.
 
     The offer row is locked for the duration, so a stock of one cannot be sold twice and two people clicking at
     the same instant cannot both get the last copy. `Refused` is raised with the reason when it cannot happen,
@@ -157,28 +220,46 @@ def _buy(offer_id: int, player_id: int, crew_id: int | None, server_id: int | No
         ):
             raise Refused(f"You have already bought **{offer.name}** as many times as you may.")
 
+        ways = offer.ways_to_pay
+        if not ways:
+            raise Refused(f"**{offer.name}** has no price, so it cannot be bought.")
+        # an offer that only takes one currency takes it whatever the caller asked for
+        paid_with = paid_with if paid_with in ways else ways[0]
+        cost = offer.cost(paid_with)
         label = f"{event_pass.name}: {offer.name}"[: PassWalletEntry.DESCRIPTION_MAX_LENGTH]
-        if offer.from_crew_pot:
+
+        if paid_with == "berries":
+            if offer.from_crew_pot:
+                raise Refused("An offer paid out of the crew's pot cannot be paid in berries.")
+            try:
+                adjust_money(
+                    player_id,
+                    -cost,
+                    reason=BerryTransaction.Reason.EVENT_SHOP,
+                    description=label[: BerryTransaction.DESCRIPTION_MAX_LENGTH],
+                    server_id=server_id,
+                )
+            except ValueError as error:
+                raise Refused(f"**{offer.name}** costs {cost:,} berries, and you do not have them.") from error
+        elif offer.from_crew_pot:
             if crew_id is None:
                 raise Refused("That offer is paid out of a crew's pot, and no crew was given.")
             try:
                 wallet.adjust_crew(
-                    crew_id, event_pass.pk, -offer.price, reason=PassWalletEntry.Reason.CREW_SPEND, description=label
+                    crew_id, event_pass.pk, -cost, reason=PassWalletEntry.Reason.CREW_SPEND, description=label
                 )
             except wallet.NotEnough as error:
                 raise Refused(
                     f"The pot holds {wallet.format_tokens(event_pass, error.held)}, and this costs "
-                    f"{wallet.format_tokens(event_pass, offer.price)}."
+                    f"{wallet.format_tokens(event_pass, cost)}."
                 ) from error
         else:
             try:
-                wallet.adjust(
-                    player_id, event_pass.pk, -offer.price, reason=PassWalletEntry.Reason.SHOP, description=label
-                )
+                wallet.adjust(player_id, event_pass.pk, -cost, reason=PassWalletEntry.Reason.SHOP, description=label)
             except wallet.NotEnough as error:
                 raise Refused(
                     f"You hold {wallet.format_tokens(event_pass, error.held)}, and this costs "
-                    f"{wallet.format_tokens(event_pass, offer.price)}."
+                    f"{wallet.format_tokens(event_pass, cost)}."
                 ) from error
 
         offer.sold += 1
@@ -198,7 +279,8 @@ def _buy(offer_id: int, player_id: int, crew_id: int | None, server_id: int | No
             offer=offer,
             player_id=player_id,
             crew_id=crew_id if offer.from_crew_pot else None,
-            price=offer.price,
+            price=cost,
+            paid_with=paid_with,
             summary=summary[:256],
         )
     return summary
@@ -355,8 +437,7 @@ class EventShopCog(commands.GroupCog, name="Event shop", group_name="shop"):
         ):
             if not offer.is_on_sale(now):
                 continue
-            price = wallet.format_tokens(event_pass, offer.price)
-            head = f"**{offer.label}** — {price}"
+            head = f"**{offer.label}** — {price_text(event_pass, offer)}"
             if offer.left is not None:
                 head += f" · {offer.left} left"
             if offer.from_crew_pot:
@@ -405,9 +486,31 @@ class EventShopCog(commands.GroupCog, name="Event shop", group_name="shop"):
                 "captain to spend it for everyone. Ask them."
             )
             return
+        ways = offer.ways_to_pay
+        if not ways:
+            await interaction.followup.send(f"**{offer.name}** has no price, so it cannot be bought.")
+            return
+        paid_with = ways[0]
+        if len(ways) > 1:
+            # both prices are set, so the choice is the player's
+            held = await wallet.abalance(player.pk, offer.event_pass_id)
+            view = PayWith(interaction.user.id, offer.event_pass, offer, held, player.money)
+            embed = discord.Embed(
+                title=offer.label,
+                colour=settings.embed_colour,
+                description=(offer.description.strip() or "") + "\n\nHow do you want to pay?",
+            )
+            embed.set_footer(text=f"You hold {wallet.format_tokens(offer.event_pass, held)} · {player.money:,} berries")
+            message = await interaction.followup.send(embed=embed, view=view, wait=True)
+            await view.wait()
+            if view.chosen is None:
+                await message.edit(content="Nothing bought.", embed=None, view=None)
+                return
+            paid_with = view.chosen
+            await message.edit(view=None)
         try:
             summary = await sync_to_async(_buy)(
-                offer.pk, player.pk, crew_id, interaction.guild_id, interaction.channel_id
+                offer.pk, player.pk, crew_id, interaction.guild_id, interaction.channel_id, paid_with
             )
         except Refused as error:
             await interaction.followup.send(str(error))
