@@ -9,8 +9,8 @@ Each JSON file here describes a whole event pass (its tiers, quests and rewards)
   finished.
 - `christmas_2026.json`: four weekly tiers from December 1 to 31, 2026, and the pass that carries the
   **Snowflakes** the Secret Santa, the advent calendar, the sleigh and the event shop all run on. Its
-  quests ask for the event's own commands (`/advent open`, `/santa join`, `/sleigh give`, `/shop
-  buy`), so they only count once those packages are loaded. The Christmas 2026 special has a rarity
+  quests ask for the event's own commands (`/advent open`, `/santa join`, `/sleigh give`,
+  `/merchant global buy`), so they only count once those packages are loaded. The Christmas 2026 special has a rarity
   of 0: raise it for the event, or no "catch a Christmas treasure" quest can be finished.
 - `awakened_fruit_craft.json` + its two `.sql` scripts: not a pass, the Awakened Fruit recipes of the
   collectors, see the last section.
@@ -53,7 +53,7 @@ For Christmas 2026 specifically, before it goes Active:
   be picked in the Secret Santa, the advent calendar, the sleigh and the shop in the admin.
 - The pass is at `position: 0`, so it is the one `/pass view` opens in December. Raise it if another
   event should win.
-- Only one pass at a time should carry a currency, or `/shop` has to ask which one: delete or clear
+- Only one pass at a time should carry a currency, or `/shop balance` has to ask which one: delete or clear
   the currency of any test pass left over.
 - `/advent catchup` does **not** count towards the `advent open` quests, which is why the last tier
   asks for 20 doors and not 25.

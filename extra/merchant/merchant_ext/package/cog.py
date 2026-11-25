@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import format_dt
 from django.utils import timezone
+from eventpass_app import wallet
 from merchant_app.models import (
     GlobalShop,
     MerchantInstance,
@@ -199,7 +200,7 @@ class Merchant(commands.GroupCog):
             instance.rotation_ends_at = timezone.now() + merchant_settings.rotation_delta
             await instance.asave(update_fields=("rotation_ends_at",))
         else:
-            items = [x async for x in instance.items.all()]
+            items = [x async for x in instance.items.select_related("event_pass", "boost").all()]
 
         entries: list[tuple[str, str]] = [(x.name, self._price_text(x)) for x in items if x.enabled]
         source = FieldPageSource(entries, per_page=merchant_settings.items, inline=True, clear_description=False)
@@ -252,11 +253,11 @@ class Merchant(commands.GroupCog):
         await interaction.response.defer(thinking=True, ephemeral=True)
 
         try:
-            ball_instance = await buy_item(self.bot, player, item, server_id=interaction.guild_id)
+            bought = await buy_item(self.bot, player, item, server_id=interaction.guild_id)
         except PurchaseError as error:
             await interaction.followup.send(str(error))
             return
-        await interaction.followup.send(purchase_message(self.bot, item, ball_instance))
+        await interaction.followup.send(await purchase_message(self.bot, item, bought))
 
     @global_group.command(name="shop")
     async def global_shop(self, interaction: discord.Interaction["BallsDexBot"], shop: GlobalShopTransform):
@@ -270,7 +271,10 @@ class Merchant(commands.GroupCog):
         """
         await interaction.response.defer(thinking=True)
         discount = shop.discount_now()
-        entries: list[tuple[str, str]] = [(x.name, self._price_text(x, discount)) async for x in shop.items.all()]
+        entries: list[tuple[str, str]] = [
+            (x.name, self._price_text(x, discount))
+            async for x in shop.items.select_related("event_pass", "boost").all()
+        ]
         source = FieldPageSource(entries, per_page=3, inline=True)
         source.embed.title = f"{settings.bot_name} {shop.name}"
         source.embed.set_image(url=f"{settings.site_base_url}/media/{shop.banner.name}")
@@ -292,7 +296,7 @@ class Merchant(commands.GroupCog):
         shop: GlobalShop
             The shop that you want to buy items
         """
-        items = [x async for x in shop.items.all() if x.enabled]
+        items = [x async for x in shop.items.select_related("event_pass", "boost").all() if x.enabled]
         if not items:
             await interaction.response.send_message(f"{shop.name} doesn't any active items.", ephemeral=True)
             return
@@ -393,7 +397,7 @@ class Merchant(commands.GroupCog):
             instance.rotation_ends_at = timezone.now() + merchant_settings.rotation_delta
             await instance.asave(update_fields=("rotation_ends_at",))
         else:
-            items = [x async for x in instance.items.all()]
+            items = [x async for x in instance.items.select_related("event_pass", "boost").all()]
 
         return [
             app_commands.Choice(
@@ -405,12 +409,24 @@ class Merchant(commands.GroupCog):
             if current.lower() in x.name.lower()
         ]
 
+    def _amount_text(self, item: MerchantItem, amount: int) -> str:
+        """
+        One amount, written in the currency the item is paid in.
+
+        The event pass is read straight off the item, so every place that lists items has to load it
+        with select_related: touching it lazily from async code is what Django refuses.
+        """
+        if item.paid_in_currency:
+            return wallet.format_tokens(item.event_pass, amount)
+        return format_currency(amount, False, self.bot)
+
     def _price_text(self, item: MerchantItem, discount: int = 0) -> str:
-        if discount and item.prize:
-            paid = GlobalShop.discounted(item.prize, discount)
-            text = f"~~{format_currency(item.prize, False, self.bot)}~~ {format_currency(paid, False, self.bot)}"
+        asked = item.price_currency if item.paid_in_currency else item.prize
+        if discount and asked:
+            paid = GlobalShop.discounted(asked, discount)
+            text = f"~~{self._amount_text(item, asked)}~~ {self._amount_text(item, paid)}"
         else:
-            text = format_currency(item.prize or 0, False, self.bot)
+            text = self._amount_text(item, asked or 0)
         if item.stock is not None:
             text += f"\n-# {item.stock_text}"
         return text

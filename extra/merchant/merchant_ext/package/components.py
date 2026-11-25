@@ -37,10 +37,14 @@ class BuyItemView(Pages):
         discount = self.shop.discount_now()
         options: list[discord.SelectOption] = []
         for item in items:
-            if discount and item.prize:
-                description = f"Prize: {GlobalShop.discounted(item.prize, discount)} (-{discount}%)"
+            asked = item.price_currency if item.paid_in_currency else item.prize
+            unit = ""
+            if item.paid_in_currency and item.event_pass:
+                unit = f" {item.event_pass.currency_name}"
+            if discount and asked:
+                description = f"Prize: {GlobalShop.discounted(asked, discount)}{unit} (-{discount}%)"
             else:
-                description = f"Prize: {item.prize if item.prize else 'Free'}"
+                description = f"Prize: {str(asked) + unit if asked else 'Free'}"
             if item.stock is not None:
                 description += f" • {item.stock_text}"
             options.append(discord.SelectOption(label=item.name, description=description, value=str(item.pk)))
@@ -49,7 +53,9 @@ class BuyItemView(Pages):
     @select(placeholder="Select an item to buy")
     async def buy_item_select(self, interaction: discord.Interaction["BallsDexBot"], select: Select):
         value = int(select.values[0])
-        item = await MerchantItem.objects.aget(pk=value)
+        item = await MerchantItem.objects.select_related("event_pass", "boost", "ball", "special").aget(
+            pk=value
+        )
         if item.sold_out:
             await interaction.response.send_message(f"**{item.name}** is sold out!", ephemeral=True)
             return
@@ -68,10 +74,12 @@ class BuyItemView(Pages):
         # player was browsing must not still take berries off
         discount = self.shop.discount_now()
         try:
-            instance = await buy_item(
+            bought = await buy_item(
                 self.bot, player, item, server_id=interaction.guild_id, discount_percent=discount
             )
         except PurchaseError as error:
             await interaction.followup.send(str(error))
             return
-        await interaction.followup.send(purchase_message(self.bot, item, instance, discount_percent=discount))
+        await interaction.followup.send(
+            await purchase_message(self.bot, item, bought, discount_percent=discount)
+        )
