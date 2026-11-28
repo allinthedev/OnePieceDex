@@ -15,7 +15,6 @@ from django.utils import timezone
 from ballsdex.core.discord import LayoutView, View
 from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.menus import ChunkedListSource, ItemFormatter, Menu
-from ballsdex.core.utils.transformers import BallInstanceTransform
 from bd_models.models import BallInstance, Player
 from settings.models import settings
 
@@ -36,6 +35,7 @@ from ..models import (
     role_of,
 )
 from . import sessions
+from .arguments import CharacterTransform, DeckCharacterTransform, DeckItemTransform, ItemTransform
 from .engine import BattleAction, BattleBall, hp_bar, resolve_action
 from .loadout import (
     ROLE_CHARACTER,
@@ -719,7 +719,7 @@ class Battle(commands.GroupCog):
             yield session, side
 
     @app_commands.command()
-    async def add(self, interaction: discord.Interaction["BallsDexBot"], countryball: BallInstanceTransform):
+    async def add(self, interaction: discord.Interaction["BallsDexBot"], countryball: CharacterTransform):
         """
         Add a character to your battle deck.
         """
@@ -768,7 +768,7 @@ class Battle(commands.GroupCog):
             await self._refresh_proposal_message(interaction, session)
 
     @app_commands.command()
-    async def remove(self, interaction: discord.Interaction["BallsDexBot"], countryball: BallInstanceTransform):
+    async def remove(self, interaction: discord.Interaction["BallsDexBot"], countryball: DeckCharacterTransform):
         """
         Remove a character from your battle deck.
         """
@@ -797,8 +797,8 @@ class Battle(commands.GroupCog):
     async def equip(
         self,
         interaction: discord.Interaction["BallsDexBot"],
-        item: BallInstanceTransform,
-        character: BallInstanceTransform,
+        item: ItemTransform,
+        character: DeckCharacterTransform,
     ):
         """
         Give a weapon or a devil fruit to a character of your battle deck.
@@ -867,7 +867,7 @@ class Battle(commands.GroupCog):
             await self._refresh_proposal_message(interaction, session)
 
     @app_commands.command()
-    async def unequip(self, interaction: discord.Interaction["BallsDexBot"], item: BallInstanceTransform):
+    async def unequip(self, interaction: discord.Interaction["BallsDexBot"], item: DeckItemTransform):
         """
         Take a weapon or a devil fruit back from the character holding it.
 
