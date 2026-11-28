@@ -1,0 +1,80 @@
+[[ballsdex.packages]]
+location = "/code/extra/balls_extension"
+path = "balls_extension_app"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "/code/extra/battle"
+path = "battle_app"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "/code/extra/collectible"
+path = "collectible_app"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "/code/extra/collector"
+path = "collector_ext"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "/code/extra/merchant"
+path = "merchant_ext"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "/code/extra/pack"
+path = "pack_app"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "git+https://github.com/cewlgruyere/V2-Completion@v0.0.3"
+path = "v2_completion"
+enabled = true
+
+[[ballsdex.packages]]
+# vendored from git+https://github.com/allinthedev/BossPackageBD@8da0901 so it can be edited here
+location = "/code/extra/boss"
+path = "boss"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "/code/extra/vote_topgg"
+path = "vote_app"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "git+https://github.com/dormieriancitizen/bd-fontchanger@v1.0.0"
+path = "bd_fontchanger"
+enabled = true
+
+[[ballsdex.packages]]
+location = "git+https://github.com/Ray-Hsueh/BallsDex-Broadcast-Pack.git#main"
+path = "broadcast"
+enabled = true
+
+[[ballsdex.packages]]
+location = "git+https://github.com/dormieriancitizen/bd-labelmaker.git@v1.0.1"
+path = "labelmaker_app"
+enabled = true
+
+[[ballsdex.packages]]
+location = "/code/extra/auction_house"
+path = "auction_house_app"
+enabled = true
+editable = false
+
+[[ballsdex.packages]]
+location = "/code/extra/frames"
+path = "frames"
+enabled = true
+editable = false

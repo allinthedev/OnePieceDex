@@ -73,3 +73,6 @@ SETUP-REPO-PRIVE.md
 post_topgg_stats_once.py
 scripts/check_crew_war_ready.py
 scripts/setup_crew_war_s1_rewards.py
+
+# Output of battle_tests/run_all.sh, rewritten at every run
+battle_tests/out/
