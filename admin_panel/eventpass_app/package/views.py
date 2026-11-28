@@ -43,8 +43,19 @@ def quest_line(state: QuestState, bot: BallsDexBot | None = None, *, pin: bool =
     mark = "\N{WHITE HEAVY CHECK MARK}" if state.completed else "\N{BLACK PARALLELOGRAM}"
     if state.claimable:
         mark = "\N{WRAPPED PRESENT}"
+    elif state.locked and not state.completed:
+        mark = "\N{LOCK}"
     title = f"{quest.emoji} {quest.name}".strip()
     lines = [f"{mark} **{title}**{f' {MANDATORY_MARK}' if pin else ''}", f"-# {state.description}"]
+    if state.locked and not state.completed:
+        # a quest held shut by another one says so instead of showing a bar that cannot move
+        waiting = ", ".join(state.waiting_on)
+        lines.append(f"-# Opens after: {waiting}" if waiting else "-# Opens once an earlier quest is done")
+        if quest.shared_with_crew:
+            lines.append("-# Counted for your whole crew")
+        return "\n".join(lines)
+    if quest.shared_with_crew:
+        lines.append("-# \N{WAVING BLACK FLAG} Counted for your whole crew")
     if not state.completed:
         lines.append(f"-# {progress_bar(state.progress, state.target)} {state.progress:,}/{state.target:,}")
     elif state.claimable:

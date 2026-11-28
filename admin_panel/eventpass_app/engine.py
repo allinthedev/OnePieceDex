@@ -11,23 +11,38 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
+from achievement_app.models import DAYS_PER_UNIT, PlayerAchievementStats
+from django.db.models import F, Q
+from django.db.models.expressions import RawSQL
 from django.utils import timezone
 
 from ballsdex.core.game_events import Event, EventContext, normalize_command
-from bd_models.models import BallInstance, Friendship
+from bd_models.models import BallInstance, Friendship, Player, balls, groups, special_filter
 from settings.models import settings
 
 from .access import has_early_access, progress_gate
-from .models import EventPass, Measure, PassTier, PlayerPass, PlayerQuest, Quest, QuestType, Reset, Reward, Source
+from .models import (
+    CrewQuest,
+    EventPass,
+    Measure,
+    PassTier,
+    PlayerPass,
+    PlayerQuest,
+    Quest,
+    QuestType,
+    Reset,
+    Reward,
+    Source,
+)
 from .rewards import grant, reward_preview
 from .state import REWARD_LINES, _finished, _pass_progress, finished_tier_ids, period_of, unlocked_tier_ids
-from .types import TYPES
+from .types import TYPES, _has_treasure_filter
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -49,6 +64,48 @@ class Increment:
 @dataclass
 class Absolute:
     value: int
+
+
+@dataclass
+class Distinct:
+    """
+    One more person counted, for the quests asking for different players rather than more actions.
+
+    The engine keeps the people already counted on the row, so trading with the same friend ten times is
+    still one. The key is a Discord ID.
+    """
+
+    key: int
+
+
+# the quests that read what a player has instead of counting what they just did. They are not evaluated from the
+# event at all: the event only says "look again", and the answer always comes from the database, which is far
+# easier to trust than a tally kept in step with catches, trades, gifts and sales.
+STATE_TYPES = frozenset(
+    {
+        QuestType.OWN_TREASURES,
+        QuestType.OWN_FAVORITES,
+        QuestType.OWN_CURRENCY,
+        QuestType.COMPLETE_GROUP,
+        QuestType.COMPLETION,
+        QuestType.PLAYTIME,
+        QuestType.IN_CREW,
+        QuestType.CREW_RANK,
+        QuestType.LEADERBOARD_RANK,
+    }
+)
+
+# a deed done in a crew war raid. Royale reports those under events of their own, and a quest says which of the
+# two families it means, so a kill in a war never feeds a quest about ordinary matches or the other way round.
+WAR_EVENTS = frozenset(
+    {
+        Event.ROYALE_WAR_PLAYED,
+        Event.ROYALE_WAR_WIN,
+        Event.ROYALE_WAR_KILL,
+        Event.ROYALE_WAR_CHEST,
+        Event.ROYALE_WAR_BOUNTY,
+    }
+)
 
 
 @dataclass
@@ -101,7 +158,7 @@ class EventPassEngine:
         candidates = [
             quest
             for quest in await self.active_quests()
-            if quest.type in TYPES and event in TYPES[quest.type].events and self._in_window(quest, now)
+            if quest.type in TYPES and self._listens(quest, event) and self._in_window(quest, now)
         ]
         if not candidates:
             return
@@ -137,6 +194,17 @@ class EventPassEngine:
                 done.append(TierDone(tier=tier, reward=reward_preview(tier.reward) if tier.reward_id else ""))
         return done
 
+    async def sync_player(self, player_id: int) -> None:
+        """
+        Refresh every quest of this player that reads a state: what they own, hold, have completed, how long
+        they have played, where they rank.
+
+        Quests counting actions cannot be refreshed — a catch is only ever counted when it happens — so this
+        is cheap enough to run whenever a player opens their pass, which is where a ranking or a berry total
+        is most likely to have moved without them doing anything the bus saw.
+        """
+        await self.handle_event(player_id, Event.SYNC, EventContext(), None)
+
     async def listens_to_command(self, name: str) -> bool:
         return any(
             quest.type == QuestType.COMMAND and normalize_command(quest.command_name) == name
@@ -153,7 +221,7 @@ class EventPassEngine:
                 async for quest in Quest.objects.filter(enabled=True, event_pass__status=EventPass.Status.ACTIVE)
                 .select_related("event_pass", "tier", "reward", "ball", "special", "group", "item", "merchant_item")
                 .select_related("collector", "tier_level")
-                .prefetch_related(REWARD_LINES)
+                .prefetch_related(REWARD_LINES, "after")
             ]
             self._loaded_at = time.monotonic()
         return self._quests
@@ -162,6 +230,19 @@ class EventPassEngine:
         self._loaded_at = 0.0
 
     # -- processing --------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _listens(quest: Quest, event: Event) -> bool:
+        """
+        Whether this quest has anything to say about this event.
+
+        Its type decides, with one addition: a quest whose counter belongs to a crew, or whose target was drawn
+        for the player, has to be caught up when they open their pass. Neither moved because of anything they
+        did, so neither would ever be noticed without a refresh.
+        """
+        if event in TYPES[quest.type].events:
+            return True
+        return event == Event.SYNC and (quest.shared_with_crew or quest.draw_treasure)
 
     @staticmethod
     def _in_window(quest: Quest, now: datetime) -> bool:
@@ -208,6 +289,9 @@ class EventPassEngine:
             )
         if not allowed:
             return []
+        allowed = await self._chains_open(player_id, allowed)
+        if not allowed:
+            return []
 
         periods = {quest.pk: period_of(quest, now) for quest in allowed}
         rows = {
@@ -223,21 +307,128 @@ class EventPassEngine:
             row = rows.get((quest.pk, period))
             if row is not None and row.completed_at:
                 continue
+            if quest.draw_treasure:
+                # the target has to exist before anything can be matched against it, so the row is written now
+                # rather than when the first deed lands
+                row = await self._drawn(player_id, quest, row, period)
+                rows[(quest.pk, period)] = row
+                if row.drawn_ball_id is None:
+                    continue
             if not self._matches(quest, context, event):
                 continue
+            if quest.draw_treasure and event != Event.SYNC:
+                if not any(instance.ball_id == row.drawn_ball_id for instance in context.instances):
+                    continue
             if quest.with_friend and not await self._with_a_friend(player_id, context):
                 continue
-            if quest.type == QuestType.OWN_TREASURES:
-                # this one asks what the player has, not what they just did, so it is counted rather than evaluated
-                result = Absolute(await self._owned_count(player_id, quest))
+            if quest.type in STATE_TYPES:
+                # these ask what the player has, not what they just did, so they are read rather than evaluated
+                result = await self._state(player_id, quest, row)
+            elif event == Event.SYNC:
+                # a refresh is not a deed: it only re-reads what is already written down, which for a quest
+                # counting actions is nothing at all
+                result = None
             else:
                 result = self._evaluate(quest, context, event)
+            if quest.shared_with_crew:
+                result = await self._shared(quest, player_id, period, result, now)
             if result is None:
                 continue
             completion = await self._apply(quest, player_id, row, period, result, now, context, channel_id)
             if completion is not None:
                 completions.append(completion)
         return completions
+
+    @staticmethod
+    async def _chains_open(player_id: int, quests: list[Quest]) -> list[Quest]:
+        """
+        Drop the quests still waiting on other quests of the same pass.
+
+        One query per pass holding a chained quest, and none at all for a pass with no chains — which is every
+        pass built so far, so this costs nothing until somebody uses it.
+        """
+        chained = [quest for quest in quests if quest.waits_for]
+        if not chained:
+            return quests
+        done: dict[int, set[int]] = {}
+        for pass_id in {quest.event_pass_id for quest in chained}:
+            done[pass_id] = {
+                quest_id
+                async for quest_id in PlayerQuest.objects.filter(
+                    player_id=player_id, quest__event_pass_id=pass_id, completed_at__isnull=False
+                ).values_list("quest_id", flat=True)
+            }
+        return [quest for quest in quests if quest.chain_open(done.get(quest.event_pass_id, set()))]
+
+    @staticmethod
+    def _draw(quest: Quest) -> int | None:
+        """
+        One treasure out of the pool the quest's filters describe, drawn flat.
+
+        Flat and not weighted by rarity on purpose: a weighted draw would hand almost everybody one of the
+        commonest treasures in the pool, which is not a target, it is a formality. Read from the treasure cache,
+        so drawing costs no query.
+        """
+        group = groups.get(quest.group_id) if quest.group_id else None
+        if quest.group_id and group is None:
+            return None
+        pool = [
+            ball.pk
+            for ball in balls.values()
+            if ball.enabled
+            and (group is None or ball.pk in group._ball_ids)
+            and (quest.min_rarity is None or ball.rarity >= quest.min_rarity)
+            and (quest.max_rarity is None or ball.rarity <= quest.max_rarity)
+        ]
+        return random.choice(pool) if pool else None
+
+    async def _drawn(self, player_id: int, quest: Quest, row: PlayerQuest | None, period: str) -> PlayerQuest:
+        """
+        This player's own target for a quest that draws one, drawing it the first time it is needed.
+
+        The write only lands while the row still has no target, and the value is read back from the database
+        rather than trusted: two deeds landing together must not leave the player with two different targets,
+        and whichever draw won is the one they keep.
+        """
+        if row is None:
+            row, _ = await PlayerQuest.objects.aget_or_create(player_id=player_id, quest_id=quest.pk, period=period)
+        if row.drawn_ball_id is not None:
+            return row
+        drawn = self._draw(quest)
+        if drawn is None:
+            log.warning("Quest %s draws a target but nothing matches its filters", quest.pk)
+            return row
+        await PlayerQuest.objects.filter(pk=row.pk, drawn_ball__isnull=True).aupdate(drawn_ball_id=drawn)
+        row.drawn_ball_id = (
+            await PlayerQuest.objects.filter(pk=row.pk).values_list("drawn_ball_id", flat=True).afirst()
+        )
+        return row
+
+    async def _shared(
+        self, quest: Quest, player_id: int, period: str, result: Increment | Absolute | Distinct | None, now: datetime
+    ) -> Absolute | None:
+        """
+        Add a deed to the crew's counter and hand back where the crew now stands.
+
+        The crew's row is the truth and the player's own row mirrors it, which is what lets everything else —
+        claiming, periods, tier completion — work exactly as it does for a quest nobody shares. The counter is
+        moved with an `F()` expression, so two members scoring at the same moment both count.
+
+        A player with no crew moves nothing and finishes nothing: there is no counter for them to be part of.
+        """
+        crew_id = await self._crew_id(player_id)
+        if crew_id is None:
+            return None
+        shared, _ = await CrewQuest.objects.aget_or_create(quest_id=quest.pk, crew_id=crew_id, period=period)
+        total = shared.progress
+        if isinstance(result, Increment) and result.amount:
+            await CrewQuest.objects.filter(pk=shared.pk).aupdate(progress=F("progress") + result.amount)
+            total = (
+                await CrewQuest.objects.filter(pk=shared.pk).values_list("progress", flat=True).afirst()
+            ) or 0
+        if total >= quest.goal and shared.completed_at is None:
+            await CrewQuest.objects.filter(pk=shared.pk, completed_at__isnull=True).aupdate(completed_at=now)
+        return Absolute(total) if total else None
 
     @staticmethod
     async def _with_a_friend(player_id: int, context: EventContext) -> bool:
@@ -254,19 +445,89 @@ class EventPassEngine:
             Q(player1_id=player_id, player2__discord_id=partner) | Q(player2_id=player_id, player1__discord_id=partner)
         ).aexists()
 
-    @staticmethod
-    async def _owned_count(player_id: int, quest: Quest) -> int:
+    async def _state(self, player_id: int, quest: Quest, row: PlayerQuest | None = None) -> Absolute | None:
         """
-        How many treasures the player owns that match the quest's filters.
+        Where the player stands on a quest that reads a state: what they own, hold, have completed or rank at.
 
-        Counted from the database rather than followed through events: a collection changes through catches,
+        Always an `Absolute`, so the best they ever reached is what counts — a quest about holding berries is
+        not undone by spending them afterwards, and one about a ranking is not lost to somebody overtaking
+        them an hour later. `None` only when the answer cannot be worked out at all.
+        """
+        match quest.type:
+            case QuestType.OWN_TREASURES:
+                return Absolute(await self._owned_queryset(player_id, quest, row).acount())
+
+            case QuestType.OWN_FAVORITES:
+                owned = self._owned_queryset(player_id, quest).filter(favorite=True)
+                return Absolute(await owned.acount())
+
+            case QuestType.OWN_CURRENCY:
+                money = await Player.objects.filter(pk=player_id).values_list("money", flat=True).afirst()
+                return Absolute(money or 0)
+
+            case QuestType.COMPLETE_GROUP:
+                return Absolute(await self._group_progress(player_id, quest))
+
+            case QuestType.COMPLETION:
+                # the achievements already decide what completion means, including what above 100% means;
+                # imported here rather than at the top so one engine never has to load the other to start
+                from achievement_app.engine import completion_percentage
+
+                return Absolute(await completion_percentage(player_id, quest.goal))
+
+            case QuestType.PLAYTIME:
+                first_catch = (
+                    await PlayerAchievementStats.objects.filter(player_id=player_id)
+                    .values_list("first_catch_at", flat=True)
+                    .afirst()
+                )
+                if first_catch is None:
+                    return None
+                days = (timezone.now() - first_catch).days
+                return Absolute(days // DAYS_PER_UNIT.get(quest.time_unit, 1))
+
+            case QuestType.IN_CREW:
+                return Absolute(1 if await self._crew_id(player_id) else 0)
+
+            case QuestType.CREW_RANK:
+                return Absolute(await self._war_place(player_id, quest.max_place or 1))
+
+            case QuestType.LEADERBOARD_RANK:
+                return Absolute(await self._money_place(player_id, quest.max_place or 1))
+        return None
+
+    @staticmethod
+    def _owned_queryset(player_id: int, quest: Quest, row: PlayerQuest | None = None):
+        """
+        The treasures a player owns that match the quest's treasure filters.
+
+        Read from the database rather than followed through events: a collection changes through catches,
         trades, gifts and sales, and a total is far easier to trust than a tally kept in step with all of them.
         """
         queryset = BallInstance.objects.filter(player_id=player_id, deleted=False)
-        if quest.ball_id:
+        if quest.draw_treasure and row is not None and row.drawn_ball_id:
+            # the pool the target was drawn from stops mattering the moment the target exists
+            queryset = queryset.filter(ball_id=row.drawn_ball_id)
+        elif quest.ball_id:
             queryset = queryset.filter(ball_id=quest.ball_id)
-        if quest.special_id:
-            queryset = queryset.filter(special_id=quest.special_id)
+        if quest.tier_level_id:
+            # a collector card is a treasure wearing that craft's own special, so asking for the craft is
+            # asking for the special it leaves behind. A craft with no special of its own leaves nothing to
+            # recognise its cards by, so the quest matches nothing rather than matching the whole collection,
+            # which is what no filter at all would quietly mean
+            special_id = quest.tier_level.special_id if quest.tier_level else None
+            if special_id is None:
+                log.warning(
+                    "Quest %s asks for the %s craft, which has no special of its own: nothing can be counted",
+                    quest.pk,
+                    quest.tier_level.name if quest.tier_level else quest.tier_level_id,
+                )
+                return queryset.none()
+            queryset = queryset.filter(special_id=special_id)
+        if quest.special_id and quest.cached_special:
+            # the bot's own filter, so the "Frame" special picks out the framed treasures here exactly as it
+            # does everywhere else rather than looking for a special no treasure ever wears
+            queryset = queryset.filter(special_filter(quest.cached_special))
         elif quest.any_special:
             queryset = queryset.filter(special_id__isnull=False)
         if quest.group_id:
@@ -279,14 +540,77 @@ class EventPassEngine:
             queryset = queryset.filter(attack_bonus__gte=quest.min_attack_bonus)
         if quest.min_health_bonus is not None:
             queryset = queryset.filter(health_bonus__gte=quest.min_health_bonus)
-        return await queryset.acount()
+        if quest.hex_contains:
+            queryset = queryset.annotate(hex_id=RawSQL("to_hex(ballinstance.id)", ())).filter(
+                hex_id__icontains=quest.hex_contains
+            )
+        return queryset
+
+    @staticmethod
+    async def _group_progress(player_id: int, quest: Quest) -> int:
+        """
+        How far the player is on the groups: distinct treasures of one named group, or whole groups finished.
+
+        One query either way — the player's distinct treasure ids — and the rest is done against the group
+        cache, so asking for "how many groups are done" costs no more than asking about one.
+        """
+        owned = {
+            ball_id
+            async for ball_id in BallInstance.objects.filter(player_id=player_id, deleted=False)
+            .values_list("ball_id", flat=True)
+            .distinct()
+        }
+        if quest.group_id:
+            group = groups.get(quest.group_id)
+            return len(owned & group._ball_ids) if group else 0
+        return sum(1 for group in groups.values() if group._ball_ids and group._ball_ids <= owned)
+
+    @staticmethod
+    async def _crew_id(player_id: int) -> int | None:
+        """Which crew the player flies for, None when they fly none or crews are not set up."""
+        from crew_app.models import CrewMembership
+
+        return await CrewMembership.objects.filter(player_id=player_id).values_list("crew_id", flat=True).afirst()
+
+    @staticmethod
+    async def _war_place(player_id: int, wanted: int) -> int:
+        """
+        1 when the player is at or above `wanted` in the running war's table of contributors, 0 otherwise.
+
+        Players tied on points share a place, so two players on 300 are both second and nobody is pushed out
+        of a top ten by a draw they did not lose.
+        """
+        from crew_app.scoring import live_war, place_of, player_points
+
+        live = await live_war()
+        if live is None:
+            return 0
+        war, _ = live
+        points = await player_points(war, player_id)
+        if not points:
+            return 0
+        return 1 if await place_of(war, points) <= wanted else 0
+
+    @staticmethod
+    async def _money_place(player_id: int, wanted: int) -> int:
+        """1 when the player is in the top `wanted` of the berry leaderboard, 0 otherwise."""
+        money = await Player.objects.filter(pk=player_id).values_list("money", flat=True).afirst()
+        if not money:
+            return 0
+        above = await Player.objects.filter(money__gt=money).acount()
+        return 1 if above + 1 <= wanted else 0
 
     def _matches(self, quest: Quest, context: EventContext, event: Event) -> bool:
         """
         The filters that apply to every type: where it happened, who with, and how much it moved.
         """
         event_pass = quest.event_pass
-        if quest.main_server_only or event_pass.main_server_only:
+        definition = TYPES.get(quest.type)
+        # a type whose events cannot name a server is exempt: a crew war scored by a background task or a
+        # collection the player simply has never happened in a guild, and holding them to the main server
+        # would turn them off without a word rather than restrict them
+        knows_server = definition.knows_server if definition else True
+        if knows_server and (quest.main_server_only or event_pass.main_server_only):
             if event_pass.main_server_id is None or context.server_id != event_pass.main_server_id:
                 return False
         if quest.partner_discord_id and context.partner_discord_id != quest.partner_discord_id:
@@ -295,13 +619,14 @@ class EventPassEngine:
             moved = abs(context.amount) or abs(context.price) or context.received_currency
             if moved < quest.min_currency:
                 return False
-        definition = TYPES.get(quest.type)
         if definition and definition.filters_instances and context.instances:
             if not any(quest.matches_instance(instance) for instance in context.instances):
                 return False
         return True
 
-    def _evaluate(self, quest: Quest, context: EventContext, event: Event) -> Increment | Absolute | None:
+    def _evaluate(
+        self, quest: Quest, context: EventContext, event: Event
+    ) -> Increment | Absolute | Distinct | None:
         """
         How much this action moves the quest, `None` when it doesn't count at all.
         """
@@ -347,7 +672,7 @@ class EventPassEngine:
                     return None
                 return Absolute(exchanged) if quest.in_one_trade else Increment(exchanged)
 
-            case QuestType.FRIEND | QuestType.BATTLE_WIN:
+            case QuestType.FRIEND:
                 return Increment(1)
 
             case QuestType.GIVE_CURRENCY:
@@ -396,7 +721,128 @@ class EventPassEngine:
                 if quest.measure == Measure.AMOUNT:
                     return Increment(context.price) if context.price else None
                 return Increment(1)
+
+            # -- treasures the event carries, counted one by one
+            case QuestType.FAVORITE | QuestType.SLEIGH_GIVE | QuestType.AUGMENT | QuestType.SANTA_OPEN:
+                count = sum(1 for x in context.instances if quest.matches_instance(x))
+                return Increment(count) if count else None
+
+            case QuestType.AUCTION_SOLD | QuestType.BOUNTY_CLAIM:
+                if quest.measure == Measure.AMOUNT:
+                    amount = abs(context.price or context.amount)
+                    return Increment(amount) if amount else None
+                count = sum(1 for x in context.instances if quest.matches_instance(x))
+                return Increment(count or 1)
+
+            case QuestType.SANTA_GIFT:
+                # a parcel paid for holds no card yet, only the promise of one, so it carries no treasure to
+                # inspect. A quest naming a treasure or a rarity therefore only counts a parcel filled with a
+                # real card, which is the whole point of being able to ask for one
+                if _has_treasure_filter(quest) and not any(quest.matches_instance(x) for x in context.instances):
+                    return None
+                return Increment(1)
+
+            # -- deeds with nothing to look at but the fact they happened
+            case (
+                QuestType.PACK_WEEKLY
+                | QuestType.ACTIVITY
+                | QuestType.VOTE
+                | QuestType.SANTA_JOIN
+                | QuestType.SLEIGH_FULL
+                | QuestType.CREW_JOIN
+                | QuestType.CREW_WAR_WIN
+                | QuestType.ADVENT_COMPLETE
+            ):
+                return Increment(1)
+
+            case QuestType.BATTLE_WIN | QuestType.BATTLE_PLAYED:
+                if quest.max_lost is not None and context.lost_count > quest.max_lost:
+                    return None
+                return Increment(1)
+
+            case QuestType.BOSS_PLAYED | QuestType.BOSS_WIN:
+                if quest.measure == Measure.AMOUNT:
+                    return Increment(context.damage) if context.damage else None
+                return Increment(1)
+
+            # -- grand line royale, where a crew war raid and an ordinary match are never mixed
+            case QuestType.ROYALE_PLAYED:
+                if not self._right_royale(quest, event):
+                    return None
+                if quest.max_place and not 0 < context.place <= quest.max_place:
+                    return None
+                if quest.min_rounds and context.rounds < quest.min_rounds:
+                    return None
+                return Increment(1)
+
+            case (
+                QuestType.ROYALE_WIN
+                | QuestType.ROYALE_KILL
+                | QuestType.ROYALE_CHEST
+                | QuestType.ROYALE_BOUNTY
+            ):
+                return Increment(1) if self._right_royale(quest, event) else None
+
+            case QuestType.ADVENT_OPEN:
+                # a door whose day has gone by is bought open with berries, and that is what tells a player
+                # who kept up with the calendar from one who paid to catch up
+                if quest.on_time and context.amount:
+                    return None
+                return Increment(1)
+
+            case QuestType.SANTA_WISH:
+                # how much of the list is written, not how many times it was edited: changing the same slot
+                # three times is still one wish
+                return Absolute(context.total) if context.total else None
+
+            case QuestType.CREW_POINTS:
+                if not context.points:
+                    return None
+                return Increment(context.points if quest.measure == Measure.AMOUNT else 1)
+
+            case QuestType.HUNT_STONE | QuestType.HUNT_COMPLETE:
+                if quest.for_crew and not context.for_crew:
+                    return None
+                return Increment(1)
+
+            case QuestType.ACHIEVEMENT_UNLOCK:
+                if quest.achievement_category_id and context.category_id != quest.achievement_category_id:
+                    return None
+                return Increment(1)
+
+            case QuestType.EVENT_SHOP_BUY:
+                if quest.merchant_item_id and context.merchant_item_id != quest.merchant_item_id:
+                    return None
+                if quest.measure == Measure.AMOUNT:
+                    # paid out of the pass's own purse, which is never berries
+                    return Increment(context.tokens) if context.tokens else None
+                return Increment(1)
+
+            case QuestType.COLLECTIBLE_BUY:
+                return self._purchase(quest, context)
+
+            # -- different people, rather than more of the same action
+            case QuestType.TRADE_PARTNERS:
+                if quest.must_receive_treasure and not context.instances:
+                    return None
+                return Distinct(context.partner_discord_id) if context.partner_discord_id else None
+
+            case QuestType.GIVE_PARTNERS:
+                if not any(quest.matches_instance(x) for x in context.instances):
+                    return None
+                return Distinct(context.partner_discord_id) if context.partner_discord_id else None
         return None
+
+    @staticmethod
+    def _right_royale(quest: Quest, event: Event) -> bool:
+        """
+        Whether this royale deed is the kind the quest asked for.
+
+        A kill in a crew war raid and a kill in an ordinary lobby arrive under events of their own, and a
+        quest says which it means. Mixing them would let a quest about ordinary matches be finished in a war
+        nobody outside a crew can enter.
+        """
+        return (event in WAR_EVENTS) == bool(quest.in_crew_war)
 
     @staticmethod
     def _purchase(quest: Quest, context: EventContext) -> Increment | None:
@@ -419,31 +865,45 @@ class EventPassEngine:
         player_id: int,
         row: PlayerQuest | None,
         period: str,
-        result: Increment | Absolute,
+        result: Increment | Absolute | Distinct,
         now: datetime,
         context: EventContext,
         channel_id: int | None,
     ) -> Completion | None:
-        target = max(quest.target, 1)
+        target = quest.goal
         if row is None:
             row, _ = await PlayerQuest.objects.aget_or_create(player_id=player_id, quest_id=quest.pk, period=period)
             if row.completed_at:
                 return None
 
-        if isinstance(result, Increment):
+        # the people a quest about different players has already counted. Written back with the progress, so
+        # the list and the number it comes from can never drift apart. The per-player lock around the whole of
+        # `_process` is what makes reading it, adding to it and writing it safe.
+        seen: list[int] | None = None
+        if isinstance(result, Distinct):
+            seen = [int(key) for key in row.seen] if isinstance(row.seen, list) else []
+            if result.key in seen:
+                return None
+            seen.append(result.key)
+            progress = min(len(seen), target)
+        elif isinstance(result, Increment):
             progress = min(row.progress + result.amount, target)
         else:
             progress = min(max(result.value, row.progress), target)
 
         if progress < target:
-            if progress != row.progress:
-                await PlayerQuest.objects.filter(pk=row.pk, completed_at__isnull=True).aupdate(progress=progress)
+            if progress != row.progress or seen is not None:
+                changes: dict[str, object] = {"progress": progress}
+                if seen is not None:
+                    changes["seen"] = seen
+                await PlayerQuest.objects.filter(pk=row.pk, completed_at__isnull=True).aupdate(**changes)
             return None
 
         # only the update that actually completes the quest counts, whichever action got there first
-        updated = await PlayerQuest.objects.filter(pk=row.pk, completed_at__isnull=True).aupdate(
-            progress=target, completed_at=now
-        )
+        done: dict[str, object] = {"progress": target, "completed_at": now}
+        if seen is not None:
+            done["seen"] = seen
+        updated = await PlayerQuest.objects.filter(pk=row.pk, completed_at__isnull=True).aupdate(**done)
         if not updated:
             return None
         await PlayerPass.objects.aget_or_create(player_id=player_id, event_pass_id=quest.event_pass_id)

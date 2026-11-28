@@ -21,6 +21,7 @@ from django.utils.safestring import mark_safe
 
 from .integrations import INTEGRATIONS, check_integrations
 from .models import (
+    CrewQuest,
     EventPass,
     Measure,
     PassRequirement,
@@ -52,6 +53,10 @@ FINE_FILTERS = (
     "hex_contains",
     "max_catch_seconds",
     "in_one_trade",
+    "min_rounds",
+    "max_lost",
+    "on_time",
+    "for_crew",
 )
 MAIN_FILTERS = tuple(name for name in PARAMETER_FIELDS if name not in FINE_FILTERS)
 
@@ -403,6 +408,7 @@ class QuestAdmin(admin.ModelAdmin):
         "item",
         "merchant_item",
         "collector",
+        "after",
     )
     readonly_fields = ("goal_preview", "thumbnail_large", "stats")
     fieldsets = [
@@ -427,7 +433,15 @@ class QuestAdmin(admin.ModelAdmin):
             "Goal",
             {
                 "description": "Only the settings used by the selected type are shown. The others are ignored.",
-                "fields": ("type", "target", "measure", "goal_preview", *MAIN_FILTERS),
+                "fields": (
+                    "type",
+                    "target",
+                    "measure",
+                    "shared_with_crew",
+                    "draw_treasure",
+                    "goal_preview",
+                    *MAIN_FILTERS,
+                ),
             },
         ),
         (
@@ -441,7 +455,22 @@ class QuestAdmin(admin.ModelAdmin):
         ("Reward", {"fields": ("reward", "claim_required", "announce", "completion_message")}),
         (
             "Availability",
-            {"fields": ("enabled", "hidden", "position", "reset", "starts_at", "ends_at", "notes", "stats")},
+            {
+                "description": "A quest with nothing in “opens after” is available as soon as its tier "
+                "is unlocked. Naming other quests of the same pass there builds a chain.",
+                "fields": (
+                    "enabled",
+                    "hidden",
+                    "position",
+                    "reset",
+                    "after",
+                    "after_logic",
+                    "starts_at",
+                    "ends_at",
+                    "notes",
+                    "stats",
+                ),
+            },
         ),
     ]
     list_display = (
@@ -535,6 +564,23 @@ class PlayerQuestAdmin(admin.ModelAdmin):
     search_fields = ("player__discord_id",)
     autocomplete_fields = ("player", "quest")
     readonly_fields = ("completed_at", "claimed_at")
+
+
+@admin.register(CrewQuest)
+class CrewQuestAdmin(admin.ModelAdmin):
+    """
+    The shared counter of a quest counted for a whole crew.
+
+    Editable on purpose: this row is the truth every member's own progress mirrors, so correcting a crew's
+    total here is how a mistake gets fixed. Each member picks the change up the next time they do something,
+    or when they open the pass.
+    """
+
+    list_display = ("crew", "quest", "period", "progress", "completed_at")
+    list_filter = ("quest__event_pass", "quest", "crew")
+    list_select_related = ("crew", "quest")
+    search_fields = ("crew__name", "quest__name")
+    autocomplete_fields = ("quest",)
 
 
 @admin.register(PlayerPass)

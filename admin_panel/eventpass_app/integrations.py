@@ -42,7 +42,24 @@ CRAFTING = Integration(
     "crafting", "Collectors (crafting)", "collector_ext", "Crafts are collector cards claimed with this package."
 )
 
-INTEGRATIONS: tuple[Integration, ...] = (AUCTION_HOUSE, BATTLES, PACKS, MERCHANT, CRAFTING)
+BOSS = Integration("boss", "Boss fights", "boss", "Boss fights are run by this package.")
+AUGMENT = Integration("augment", "Augment", "augment_app", "Augmenting a treasure comes from this package.")
+COLLECTIBLES = Integration(
+    "collectibles", "Collectibles", "collectible_app", "Collectible purchases come from this package."
+)
+VOTE = Integration("vote", "Top.gg votes", "vote_app", "Votes are reported by this package's webhook.")
+
+INTEGRATIONS: tuple[Integration, ...] = (
+    AUCTION_HOUSE,
+    BATTLES,
+    PACKS,
+    MERCHANT,
+    CRAFTING,
+    BOSS,
+    AUGMENT,
+    COLLECTIBLES,
+    VOTE,
+)
 
 
 def missing_integrations() -> list[Integration]:

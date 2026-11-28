@@ -4,6 +4,7 @@ The /pass commands: look at an event pass, claim what you finished, and see how 
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import discord
@@ -26,6 +27,8 @@ from ..models import EventPass, PlayerQuest, Quest
 from ..state import build_state
 from ..transformers import EventPassTransform
 from .views import PassView
+
+log = logging.getLogger("eventpass")
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot
@@ -150,6 +153,13 @@ class EventPassCog(commands.GroupCog, name="Event pass", group_name="pass"):
         # the only place a player can enter a restricted pass: their Discord roles are only readable here,
         # and the verdict written down now is what the engine reads for everything that follows
         access = await check_access(player.pk, chosen, role_ids=roles, join=True)
+        # the quests that read a state — a ranking, a berry total, how long they have played, how much of the
+        # dex they own — can move without the player doing anything the bus saw, so they are refreshed here,
+        # before the pass is drawn. A failure never stops them seeing it.
+        try:
+            await engine.sync_player(player.pk)
+        except Exception:
+            log.exception("could not refresh the quests of player %s", player.pk)
         state = await build_state(player, chosen)
         state.access = access if access.restricted else None
         view = PassView(self.bot, player, state)
