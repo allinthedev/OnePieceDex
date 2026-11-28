@@ -92,7 +92,9 @@ async def serialize_ball(
     ball = countryball.countryball
     emoji = bot.get_emoji(ball.emoji_id)
     bonus = special_bonus(countryball, battle_settings)
-    health = countryball.health + (buff.health if buff else 0) + bonus
+    # multiplied here, once, with everything the card brings: attack and health are about the same number
+    # on every treasure, and without this a hit takes most of an equal opponent's health
+    health = round((countryball.health + (buff.health if buff else 0) + bonus) * battle_settings.health_multiplier)
     attack = countryball.attack + (buff.attack if buff else 0) + bonus
     return BattleBall(
         instance_id=countryball.pk,
@@ -115,7 +117,9 @@ async def serialize_ball(
     )
 
 
-def serialize_item(countryball: BallInstance, slot: str, percent: int, bot: "BallsDexBot") -> dict:
+def serialize_item(
+    countryball: BallInstance, slot: str, percent: int, bot: "BallsDexBot", health_multiplier: float = 1.0
+) -> dict:
     """
     A weapon or a devil fruit as it sits on a fighter: its own stats, already worked out for this very card,
     and the share of them its bearer gets. Plain values only, so it goes into the battle state as it is.
@@ -129,7 +133,8 @@ def serialize_item(countryball: BallInstance, slot: str, percent: int, bot: "Bal
         "name": ball.country,
         "emoji": str(emoji) if emoji else "",
         "attack": countryball.attack,
-        "health": countryball.health,
+        # an item's health is multiplied like its bearer's own, or equipment would weigh on attack alone
+        "health": round(countryball.health * health_multiplier),
         "percent": percent,
         # kept with the item so a resistance about "any blunt weapon" needs no lookup in the middle of a turn
         "group_ids": group_ids_of(ball.pk),
@@ -838,7 +843,7 @@ class Battle(commands.GroupCog):
                     return
 
             percent = await equip_percent(bearer["ball_id"], item.ball_id, battle_settings)
-            entry = serialize_item(item, slot, percent, self.bot)
+            entry = serialize_item(item, slot, percent, self.bot, battle_settings.health_multiplier)
             fighter = BattleBall.from_dict(bearer)
             replaced = next((old for old in fighter.equipment if old.get("slot") == slot), None)
             # one weapon and one fruit each: a second one of a kind takes the place of the first

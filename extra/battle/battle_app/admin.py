@@ -58,7 +58,13 @@ class BattleSettingsAdmin(admin.ModelAdmin):
         (
             "Combat",
             {
+                "description": (
+                    "How fast a battle goes is mostly the <b>health multiplier</b>: every treasure has "
+                    "about as much attack as health, so without it a hit takes most of an equal "
+                    "opponent's health."
+                ),
                 "fields": [
+                    "health_multiplier",
                     "attack_variance_min",
                     "attack_variance_max",
                     "crit_chance",
