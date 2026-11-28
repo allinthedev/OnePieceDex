@@ -1,0 +1,434 @@
+character,item,item_group,percent,note
+,,Devil fruits,50,Catch-all: any fruit that is not the character's own (also covers fruits with no type group)
+,,Logia,50,Default for a Logia that is not the character's own
+,,Zoan,50,Default for a Zoan that is not the character's own
+,,Paramecia,50,Default for a Paramecia that is not the character's own
+,,Weapons,50,Catch-all: any weapon the character has no training with
+,,Katanas,50,Default for an untrained wielder
+,,Western Swords,50,Default for an untrained wielder
+,,Cane Swords,50,Default for an untrained wielder
+,,Polearms,50,Default for an untrained wielder
+,,Blunt Weapons,50,Default for an untrained wielder
+,,Staves,50,Default for an untrained wielder
+,,Ranged Weapons,50,Default for an untrained wielder
+Saint Nerona Imu,Akuma no Mi (Devil's Fruit),,200,Dex-defined fruit of Imu (the card text names Imu); the manga has not named Imu's power
+JoyBoy,Gomu Gomu no Mi (Gum Gum),,200,Previous Nika: Vegapunk's broadcast says Joy Boy's body stretched like rubber
+Monkey D. Luffy,Gomu Gomu no Mi (Gum Gum),,200,"Ate it as a child; awakened as Hito Hito no Mi, Model: Nika"
+Marshall D. Teach (Blackbeard),Yami Yami no Mi (Dark Dark),,200,Killed Thatch to get it
+Loki,Nidhöggr,,200,"Ate Elbaf's legendary fruit, the dragon Nidhoggr"
+Edward Newgate (Whitebeard),Gura Gura no Mi (Quake Quake),,200,"Original user, the strongest Paramecia"
+Marshall D. Teach (Blackbeard),Gura Gura no Mi (Quake Quake),,200,Stole it from Whitebeard's body at Marineford
+Trafalgar D. Water Law,Ope Ope no Mi,,200,Fed to him by Corazon
+Kaido,Seiryu (Azure Dragon),,200,"Uo Uo no Mi, Model: Seiryu"
+Kozuki Momonosuke,Seiryu (Azure Dragon),,150,"Ate Vegapunk's artificial copy of Kaido's fruit, not the original"
+Sakazuki (Akainu),Magu Magu no Mi (Magma Magma),,200,Magma Logia of the Fleet Admiral
+Kuzan,Hie Hie no Mi (Chilly Chilly),,200,Ice Logia of the former admiral Aokiji
+"Eustass ""Captain"" Kidd",Jiki Jiki no Mi (Magnet Magnet),,200,Magnetism Paramecia
+Borsalino (Kizaru),Pika Pika no Mi (Light Light),,200,Light Logia of the admiral
+Loki,Ratatoskr,,150,"Eaten by his hammer Ragnir, not by Loki himself"
+Bartholomew Kuma,Nikyu Nikyu no Mi (Paw Paw),,200,Paw Paw user
+S-Bear,Nikyu Nikyu no Mi (Paw Paw),,150,"Seraphim: green-blood replica of Kuma's power, not the fruit itself"
+Marco,Tori Tori:Phoenix,,200,Marco the Phoenix
+Enel,Goro Goro no Mi (Thunder Thunder),,200,Lightning Logia of Skypiea's God
+Charlotte Linlin (Big Mom),Soru Soru no Mi (Soul Soul),,200,Inherited from Mother Carmel
+Sengoku,Hito Hito: Buddha,,200,Sengoku the Buddha
+Sabo,Mera Mera no Mi (Fire Fire),,200,Won it at the Corrida Colosseum after Ace's death
+Portgas D. Ace,Mera Mera no Mi (Fire Fire),,200,Fire Fist Ace
+Greenbull (Aramaki),Mori Mori no Mi (Forest Forest),,200,Forest Logia of the admiral
+Sir Crocodile,Suna Suna no Mi (Sand Sand),,200,Sand Logia
+S-Croc,Suna Suna no Mi (Sand Sand),,150,"Seraphim of Crocodile: replica of his power (staff decision, from the dex card)"
+Fujitora (Issho),Zushi Zushi no Mi (Press Press),,200,Gravity Paramecia of the admiral
+St. Ethanbaron V. Nusjuro,Bakotsu,,200,His yokai form (the dex lists the Elders' forms as fruits)
+St. Topman Warcury,Fengxi,,200,His yokai form (the dex lists the Elders' forms as fruits)
+St. Jaygarcia Saturn,Gyuki,,200,His yokai form (the dex lists the Elders' forms as fruits)
+St. Marcus Mars,Itsumade,,200,His yokai form (the dex lists the Elders' forms as fruits)
+St. Shepherd Ju Peter,Sandworm,,200,His yokai form (the dex lists the Elders' forms as fruits)
+Yamato,Okuchi no Makami,,200,"Inu Inu no Mi, Model: Okuchi no Makami"
+Charlotte Katakuri,Mochi Mochi no Mi,,200,Special Paramecia of the Sweet Commander
+Magellan,Doku Doku no Mi (Venom Venom),,200,Warden of Impel Down
+Donquixote Doflamingo,Ito Ito no Mi (String String),,200,The Heavenly Yaksha's strings
+S-Flamingo,Ito Ito no Mi (String String),,150,"Seraphim of Doflamingo: replica of his power (staff decision, from the dex card)"
+Rob Lucci,Neko:Leopard,,200,"Neko Neko no Mi, Model: Leopard"
+Queen (Scien),Brachiosaurus,,200,"Ryu Ryu no Mi, Model: Brachiosaurus"
+King (Alber),Pteranodon,,200,"Ryu Ryu no Mi, Model: Pteranodon"
+"""Golden Lion"" Shiki",Fuwa Fuwa no Mi (Float Float),,200,The flying pirate
+Jewelry Bonney,Toshi Toshi no Mi (Age Age),,200,Age manipulation
+St. Manmayer Gunko,Aro Aro no Mi (Arrow Arrow),,200,"Holy Knight, arrow power"
+Caesar Clown,Gasu Gasu no Mi (Gas Gas),,200,Gas Logia
+Smoker,Moku Moku no Mi (Smoke Smoke),,200,The White Hunter's smoke Logia
+Karasu,Susu Susu no Mi (Soot Soot),,200,Soot Logia of the North Army commander
+Boa Hancock,Mero Mero no Mi (Love Love),,200,The Pirate Empress
+S-Snake,Mero Mero no Mi (Love Love),,150,"Seraphim: green-blood replica of Hancock's power, not the fruit itself"
+St. Shepherd Sommers,Iba Iba no Mi (Thorn Thorn),,200,"Holy Knight, thorn power"
+St. Rimoshifu Killingham,Kirin,,200,"Ryu Ryu no Mi, Model: Kirin"
+Buggy the Clown,Bara Bara no Mi (Chop Chop),,200,Swallowed it by accident on Roger's ship
+Catarina Devon,Kyubi no Kitsune (Nine Tailed Fox),,200,"Inu Inu no Mi, Model: Kyubi no Kitsune"
+Monet,Yuki Yuki no Mi (Snow Snow),,200,"Snow Logia (her harpy body comes from Law's surgery, not a fruit)"
+Mr.3 (Galdino),Doru Doru no Mi (Wax Wax),,200,Wax man of Baroque Works
+Gecko Moria,Kage Kage no Mi (Shadow Shadow),,200,Master of shadows
+S-Bat,Kage Kage no Mi (Shadow Shadow),,150,"Seraphim of Moria: replica of his power (staff decision, from the dex card)"
+Jack the Drought,Mammoth,,200,"Zou Zou no Mi, Model: Mammoth"
+Ulti,Pachycephalosaurus,,200,"Ryu Ryu no Mi, Model: Pachycephalosaurus"
+X Drake,Allosaurus,,200,"Ryu Ryu no Mi, Model: Allosaurus"
+Who's Who,Saber Tiger,,200,"Neko Neko no Mi, Model: Saber Tiger"
+Page One,Spinosaurus,,200,"Ryu Ryu no Mi, Model: Spinosaurus"
+Sasaki,Triceratops,,200,"Ryu Ryu no Mi, Model: Triceratops"
+Kaku,Ushi Ushi no Mi (Giraffe),,200,Eaten at Enies Lobby
+"""Diamond"" Jozu",Kira Kira no Mi (Diamond Diamond),,200,Diamond body
+Van Augur,Wapu Wapu no Mi (Warp Warp),,200,"Teleportation, revealed at Winner Island"
+Perona,Horo Horo no Mi,,200,The Ghost Princess
+Stussy (clone),Batto Batto no Mi (Bat Bat),,200,"Batto Batto no Mi, Model: Vampire"
+Sugar,Hobi Hobi no Mi,,200,Turns people into toys
+Emporio Ivankov,Horu Horu no Mi (Hormone Hormone),,200,The Miracle Person
+Charlotte Smoothie,Shibo Shibo no Mi (Squeeze Squeeze),,200,Sweet Commander
+St. Figarland Shamrock,Cerberus,,150,"Eaten by his sword Cerberus, not by Shamrock himself"
+Tony Tony Chopper,Hito Hito no Mi (Human Human),,200,The reindeer who became human
+Laffitte,Hapi Hapi no Mi (Harpy),,200,His fruit according to the dex card: the white wings he flies with (staff decision)
+Bartolomeo,Bari Bari no Mi (Barrier Barrier),,200,The Cannibal's barriers
+Uta,Uta Uta no Mi (Sing Sing),,200,Film Red
+Pell,Falcon,,200,"Tori Tori no Mi, Model: Falcon"
+Pica,Ishi Ishi no Mi (Stone Stone),,200,Merges with stone
+Avalo Pizarro,Shima Shima no Mi (Island Island),,200,Merges with an island
+Nico Robin,Hana Hana no Mi (Flower Flower),,200,Ate it as a child in Ohara
+Charlotte Cracker,Bisu Bisu no Mi (Biscuit Biscuit),,200,Biscuit soldiers
+Charlotte Perospero,Pero Pero no Mi (Lick Lick),,200,Candy man
+Basil Hawkins,Wara Wara no Mi (Straw Straw),,200,Straw voodoo
+Prince Grus,Gunyo Gunyo no Mi (Clay Clay),,200,"SWORD member, clay power"
+Charlotte Oven,Netsu Netsu no Mi (Heat Heat),,200,Heat power
+Caribou,Numa Numa no Mi (Swamp Swamp),,200,Swamp Logia
+Scratchmen Apoo,Oto Oto no Mi (Tone Tone),,200,Fights with music
+Urouge,Kyo Kyo no Mi (Buff Buff),,200,The card text describes Urouge's power: damage taken turns into muscle
+Jesus Burgess,Riki Riki no Mi (Strong Strong),,200,Superhuman strength
+Capone Bege,Shiro Shiro no Mi (Castle Castle),,200,The castle man
+Boa Sandersonia,Hebi:Anaconda,,200,"Hebi Hebi no Mi, Model: Anaconda"
+Boa Marigold,King Cobra,,200,"Hebi Hebi no Mi, Model: King Cobra"
+Jabra,Inu:Wolf,,200,"Inu Inu no Mi, Model: Wolf"
+Shiryu,Suke Suke no Mi (Clear Clear),,200,Took it from Absalom
+Babe,Dachshund,,150,"Eaten by Lassoo, the gun-dog Mr. 4 fights with, not by Mr. 4 himself"
+Kozuki Toki,Toki Toki no Mi (Time Time),,200,Travelled 800 years forward
+Dr. Vegapunk (Stella),Nomi Nomi no Mi (Brain Brain),,200,The limitless brain
+Foxy,Noro Noro no Mi (Slow Slow),,200,Slow-motion beams
+Señor Pink,Sui Sui no Mi (Swim Swim),,200,Swims through the ground
+S-Shark,Sui Sui no Mi (Swim Swim),,150,"Seraphim: green-blood replica of Senor Pink's power, not the fruit itself"
+Machvise,Ton Ton no Mi (Ton Ton),,200,Weight power
+Wapol,Baku Baku no Mi (Munch Munch),,200,Eats anything
+Tsuru,Woshu Woshu no Mi (Wash Wash),,200,Washes people like laundry
+Mr.2 (Bon Clay),Mane Mane no Mi (Clone Clone),,200,Copies faces and bodies
+Bellamy,Bane Bane no Mi (Spring Spring),,200,The Hyena's springs
+Kurozumi Kanjuro,Fude Fude no Mi (Brush Brush),,200,His drawings come to life
+Giolla,Ato Ato no Mi (Art Art),,200,Turns things into abstract art
+Brook,Yomi Yomi no Mi (Revive Revive),,200,Came back from the dead
+Shinobu,Juku Juku no Mi (Ripe Ripe),,200,Ripens and rots what she touches
+Onimaru,Onyudo,,200,"Hito Hito no Mi, Model: Onyudo, the form he takes as Gyukimaru"
+"""Warrior"" Leo",Nui Nui no Mi (Stitch Stitch),,200,Sews things together
+"""Big News"" Morgans",Tori:Albatross,,200,"Tori Tori no Mi, Model: Albatross"
+Mr.5 (Gem),Bomu Bomu no Mi (Bomb Bomb),,200,Bomb man
+Miss Doublefinger (Zala),Toge Toge no Mi (Spike Spike),,200,Spike woman
+Gladius,Pamu Pamu no Mi (Pop Pop),,200,Ruptures what he touches
+Black Maria,Rosamygale Grauvogeli (Ancient Spider),,200,"Kumo Kumo no Mi, Model: Rosamygale Grauvogeli"
+Baby 5,Buki Buki no Mi (Arms Arms),,200,Turns into any weapon
+Belo Betty,Kobu Kobu no Mi (Pump Pump),,200,Rallies people with her flag
+Mr.1 (Daz Bones),Supa Supa no Mi (Dice Dice),,200,Blade man of Baroque Works
+S-Hawk,Supa Supa no Mi (Dice Dice),,150,"Seraphim: green-blood replica of Daz Bones' power, not the fruit itself"
+Blueno,Doa Doa no Mi (Door Door),,200,Opens doors in anything
+Raizo,Maki Maki no Mi (Scroll Scroll),,200,Stores things in scrolls
+Charlotte Brulee,Mira Mira no Mi (Mirror Mirror),,200,The Mirro-World
+Streusen,Kuku Kuku no Mi (Cook Cook),,200,Turns anything into food
+"Donquixote Rosinante ""Corazon""",Nagi Nagi no Mi (Calm Calm),,200,Silence power
+Trebol,Beta Beta no Mi (Sticky Sticky),,200,Sticky mucus
+Diamante,Hira Hira no Mi (Ripple Ripple),,200,Flattens and ripples things
+Sanjuan Wolf,Deka Deka no Mi (Huge Huge),,200,The Colossal Battleship
+Inazuma,Choki Choki no Mi (Snip Snip),,200,Scissor hands
+Vasco Shot,Gabu Gabu no Mi (Glug Glug),,200,Alcohol power
+Stronger,Pegasus,,200,"Uma Uma no Mi, Model: Pegasus, eaten by Doc Q's horse"
+Hina,Ori Ori no Mi (Bind Bind),,200,Black Cage Hina
+Morley,Oshi Oshi no Mi (Push Push),,200,Pushes the ground like clay
+Charlotte Daifuku,Hoya Hoya no Mi (Lamp Lamp),,200,Summons a genie
+Buffalo,Guru Guru no Mi (Spin Spin),,200,Spins like a propeller
+Viola,Giro Giro no Mi (Glare Glare),,200,Sees through everything
+Miss Merry Christmas (Drophy),Mogu Mogu no Mi (Mole Mole),,200,Mole Zoan
+Doc Q,Shiku Shiku no Mi (Sick Sick),,200,Spreads diseases
+Dalton,Bison,,200,"Ushi Ushi no Mi, Model: Bison"
+Chaka,Inu:Jackal,,200,"Inu Inu no Mi, Model: Jackal"
+Miss Valentine (Mikita),Kiro Kiro no Mi (Kilo Kilo),,200,Changes her weight
+"""Foxfire"" Kinemon",Fuku Fuku no Mi (Clothes Clothes),,200,Makes clothes out of leaves and stones
+Charlotte Pudding,Memo Memo no Mi (Memory Memory),,200,Edits memories like film
+Kalifa,Awa Awa no Mi (Bubble Bubble),,200,Eaten at Enies Lobby
+Alvida,Sube Sube no Mi (Slip Slip),,200,Slippery skin
+Princess Mansherry,Chiyu Chiyu no Mi (Heal Heal),,200,Healing tears
+Kujaku,Muchi Muchi no Mi (Whip Whip),,200,"SWORD member, tames with her whip"
+Kurozumi Tama,Kibi Kibi no Mi (Kibi Dango),,200,Tames animals with dango
+Pekoms,Kame Kame no Mi (Turtle Turtle),,200,Turtle Zoan
+Baron Tamago,Tama Tama no Mi (Egg Egg),,200,"Egg, chick, then rooster"
+Dracule Mihawk,Yoru,,200,"His black blade, one of the 12 Supreme Grade swords"
+S-Hawk,Yoru,,150,Mihawk's Seraphim clone fights with a replica of Yoru
+Gol D. Roger,Ace,,200,The Pirate King's Supreme Grade cutlass
+Rocks D. Xebec,Eclipse,,200,His saber according to the dex card (lost after God Valley)
+Loki,Ragnir,,200,Elbaf's legendary warhammer
+Edward Newgate (Whitebeard),Murakumogiri,,200,His naginata for 46 years
+St. Ethanbaron V. Nusjuro,Shodai Kitetsu,,200,Staff decision: the Elder's katana is treated as the first Kitetsu
+Roronoa Zoro,Shusui,,200,"Won from Ryuma's zombie at Thriller Bark, returned in Wano"
+Shimotsuki Ryuma,Shusui,,200,"The Sword God's black blade, treasure of Wano"
+"""Red-Haired"" Shanks",Gryphon,,200,His saber (Divine Departure)
+Roronoa Zoro,Wado Ichimonji,,200,"Kuina's sword, carried since his promise"
+Kuina,Wado Ichimonji,,200,Her family's sword before Zoro inherited it
+Kozuki Oden,Enma,,200,"One of his two swords, the one that cut Kaido"
+Roronoa Zoro,Enma,,200,Given by Hiyori in exchange for Shusui
+St. Figarland Shamrock,Cerberus (Sword),,200,"His saber, twin of Shanks' Gryphon"
+Kozuki Oden,Ame No Habakiri,,200,One of his two swords
+Fujitora (Issho),Yakuza Kasen,,200,His cane sword according to the dex card
+Trafalgar D. Water Law,Kikoku,,200,His cursed nodachi
+Roronoa Zoro,Sandai Kitetsu,,200,Tamed the cursed sword in Loguetown
+Roronoa Zoro,Yubashiri,,200,"Gift of Ipponmatsu, rusted away at Enies Lobby"
+Charlotte Linlin (Big Mom),Napoleon,,200,"Her bicorne homie, used as a sword"
+Shiryu,Raiu,,200,His nodachi
+Nami,Sorcery Clima Tact,,200,"Her weapon, third upgrade by Usopp"
+Zeus,Sorcery Clima Tact,,200,The homie fused into the staff: he is its power source
+Vista,Kaken,,200,The twin blades of Flower Sword Vista
+"""Golden Lion"" Shiki",Oto and Kogarashi,,200,"His twin swords, now worn as legs"
+Brook,Soul Solid,,200,His cane sword
+Tashigi,Shigure,,200,Her Grade sword
+Enel,God Staff,,200,The golden staff he reshapes with his lightning
+Kaido,Hassaikai,,200,His signature kanabo
+Cavendish,Durandal,,200,His Famous Blade
+Usopp,Kabuto,,200,His slingshot since Enies Lobby
+Basil Hawkins,Warabide,,200,The straw sword made by his fruit
+Charlotte Cracker,Pretzel,,200,His Famous Blade
+Charlotte Amande,Shirauo,,200,Her nodachi
+Gol D. Roger,,Katanas,130,Swordsman (Western Swords at 150): skill carries over to other blades
+Gol D. Roger,,Western Swords,150,The Pirate King fought with a blade
+Gol D. Roger,,Cane Swords,130,Swordsman (Western Swords at 150): skill carries over to other blades
+Rocks D. Xebec,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Rocks D. Xebec,,Western Swords,140,Legendary captain who fought with a saber at God Valley
+Rocks D. Xebec,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Edward Newgate (Whitebeard),,Polearms,150,Fought for decades with a naginata
+Marshall D. Teach (Blackbeard),,Devil fruits,120,Unique body able to hold more than one fruit
+Marshall D. Teach (Blackbeard),,Ranged Weapons,110,Carries three flintlocks
+Monkey D. Luffy,,Katanas,30,Cannot use swords: says so himself and swings Nidai Kitetsu like a club in Wano
+Monkey D. Luffy,,Western Swords,30,Cannot use swords: says so himself and swings Nidai Kitetsu like a club in Wano
+Monkey D. Luffy,,Cane Swords,30,Cannot use swords: says so himself and swings Nidai Kitetsu like a club in Wano
+"""Red-Haired"" Shanks",,Katanas,130,Swordsman (Western Swords at 150): skill carries over to other blades
+"""Red-Haired"" Shanks",,Western Swords,150,Emperor whose saber stops admirals
+"""Red-Haired"" Shanks",,Cane Swords,130,Swordsman (Western Swords at 150): skill carries over to other blades
+Dracule Mihawk,,Katanas,150,World's strongest swordsman: any blade is his
+Dracule Mihawk,,Western Swords,150,World's strongest swordsman: any blade is his
+Dracule Mihawk,,Cane Swords,150,World's strongest swordsman: any blade is his
+Loki,,Blunt Weapons,150,Wields Elbaf's warhammer
+Kaido,,Blunt Weapons,150,Kanabo master (Thunder Bagua)
+King Harald,,Polearms,130,Staff decision: the king of Elbaf is given polearms
+Charlotte Linlin (Big Mom),,Katanas,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Charlotte Linlin (Big Mom),,Western Swords,130,Regularly fights with Napoleon in sword form
+Charlotte Linlin (Big Mom),,Cane Swords,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Scopper Gaban,,Polearms,140,Roger's left hand fights with twin axes; filed under Polearms until the dex has an axe group
+Silvers Rayleigh,,Katanas,130,Swordsman (Western Swords at 150): skill carries over to other blades
+Silvers Rayleigh,,Western Swords,150,"The Dark King, Roger's swordsman first mate"
+Silvers Rayleigh,,Cane Swords,130,Swordsman (Western Swords at 150): skill carries over to other blades
+Kozuki Oden,,Katanas,150,Two Sword Style samurai who scarred Kaido
+Kozuki Oden,,Western Swords,130,Swordsman (Katanas at 150): skill carries over to other blades
+Kozuki Oden,,Cane Swords,130,Swordsman (Katanas at 150): skill carries over to other blades
+St. Figarland Shamrock,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+St. Figarland Shamrock,,Western Swords,140,"Commander of the Holy Knights, saber duelist"
+St. Figarland Shamrock,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Fujitora (Issho),,Katanas,130,Swordsman (Cane Swords at 150): skill carries over to other blades
+Fujitora (Issho),,Western Swords,130,Swordsman (Cane Swords at 150): skill carries over to other blades
+Fujitora (Issho),,Cane Swords,150,Fights only with his cane sword
+Roronoa Zoro,,Katanas,150,"Three Sword Style, the top katana wielder of his generation"
+Roronoa Zoro,,Western Swords,130,Swordsman (Katanas at 150): skill carries over to other blades
+Roronoa Zoro,,Cane Swords,130,Swordsman (Katanas at 150): skill carries over to other blades
+Sabo,,Staves,140,Fights with a metal pipe staff
+Vinsmoke Sanji,,Weapons,25,Fights only with his legs: a cook's hands and blades are not for combat
+Trafalgar D. Water Law,,Katanas,130,Fights with his nodachi inside Room
+Trafalgar D. Water Law,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Trafalgar D. Water Law,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Benn Beckman,,Ranged Weapons,150,Rifleman who held Kizaru at gunpoint
+Lucky Roux,,Ranged Weapons,120,Fights with a flintlock
+Yamato,,Blunt Weapons,140,"Fights with the kanabo Takeru, same style as Kaido"
+Yasopp,,Ranged Weapons,150,"Sniper of the Red Hair Pirates, never misses"
+Buggy the Clown,,Ranged Weapons,110,Buggy Ball cannon and Muggy Ball launcher
+St. Ethanbaron V. Nusjuro,,Katanas,140,The swordsman among the Five Elders
+St. Ethanbaron V. Nusjuro,,Western Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+St. Ethanbaron V. Nusjuro,,Cane Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+St. Figarland Garling,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+St. Figarland Garling,,Western Swords,140,"Former supreme commander of the Holy Knights, swordsman of God Valley"
+St. Figarland Garling,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Charlotte Katakuri,,Polearms,140,Fights with the trident Mogura
+King (Alber),,Katanas,140,"Kaido's right hand, sword and flame"
+King (Alber),,Western Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+King (Alber),,Cane Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+Queen (Scien),,Ranged Weapons,120,Fires Plague Rounds and built-in guns
+Shiryu,,Katanas,140,"Shiryu of the Rain, master swordsman of Impel Down"
+Shiryu,,Western Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+Shiryu,,Cane Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+Van Augur,,Ranged Weapons,150,"The Supersonic, long-range sniper"
+Donquixote Doflamingo,,Ranged Weapons,110,Uses a flintlock for his executions
+Enel,,Staves,140,Fights with his golden staff
+Brook,,Katanas,120,Swordsman (Cane Swords at 140): skill carries over to other blades
+Brook,,Western Swords,120,Swordsman (Cane Swords at 140): skill carries over to other blades
+Brook,,Cane Swords,140,Fencer whose draw is too fast to see
+Franky,,Ranged Weapons,130,Built-in cannons and Weapons Left
+Nami,,Staves,140,"Bo-staff fighter since Arlong Park, then the Clima-Tact"
+Usopp,,Ranged Weapons,150,Sniper of the Straw Hats
+"""Golden Lion"" Shiki",,Katanas,140,Two-sword fighter who rivaled Roger
+"""Golden Lion"" Shiki",,Western Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+"""Golden Lion"" Shiki",,Cane Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+Catarina Devon,,Polearms,120,Staff decision: given polearms
+Laffitte,,Polearms,120,Staff decision: his cane is filed under Polearms
+Killer,,Western Swords,120,Blade fighter (Punisher scythes; no scythe group in the dex yet)
+Charlotte Cracker,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Charlotte Cracker,,Western Swords,140,Sweet Commander swordsman
+Charlotte Cracker,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Kaku,,Katanas,130,Four Sword Style: two blades and his legs
+Kaku,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Kaku,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Smoker,,Staves,130,"Seven-shaku jitte, used like a staff"
+Basil Hawkins,,Western Swords,120,Fights with his straw sword
+Capone Bege,,Ranged Weapons,130,Mafia gunman with an arsenal inside his body
+Urouge,,Blunt Weapons,130,Swings a huge pillar-shaped club
+X Drake,,Katanas,110,Swordsman (Western Swords at 130): skill carries over to other blades
+X Drake,,Western Swords,130,Fights with a saber
+X Drake,,Cane Swords,110,Swordsman (Western Swords at 130): skill carries over to other blades
+"Donquixote Rosinante ""Corazon""",,Ranged Weapons,110,Carried and fired a flintlock
+Izo,,Ranged Weapons,140,Dual-pistol division commander
+Vista,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Vista,,Western Swords,140,Flower Sword Vista traded blows with Mihawk
+Vista,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Cavendish,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Cavendish,,Western Swords,140,Prodigy swordsman (and Hakuba)
+Cavendish,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Inuarashi,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Inuarashi,,Western Swords,140,"Duke of Mokomo, fences with a saber"
+Inuarashi,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Jack the Drought,,Western Swords,120,Fights with twin shotel blades
+Nekomamushi,,Polearms,140,Fights with a giant fork-headed polearm
+Sasaki,,Western Swords,120,Fights with a coiled mechanical sword
+Who's Who,,Katanas,120,Ex-CP9 swordsman (sword type unclear)
+Who's Who,,Western Swords,120,Ex-CP9 swordsman (sword type unclear)
+Charlotte Smoothie,,Katanas,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Charlotte Smoothie,,Western Swords,130,Sweet Commander fighting with a great sword
+Charlotte Smoothie,,Cane Swords,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Doc Q,,Polearms,120,Fights with a large scythe
+"""Foxfire"" Kinemon",,Katanas,140,Foxfire Style: cuts fire itself
+"""Foxfire"" Kinemon",,Western Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+"""Foxfire"" Kinemon",,Cane Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+Denjiro,,Katanas,140,Strongest swordsman of the Nine Red Scabbards
+Denjiro,,Western Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+Denjiro,,Cane Swords,120,Swordsman (Katanas at 140): skill carries over to other blades
+Kawamatsu,,Katanas,130,Kappa Style swordsman of the Red Scabbards
+Kawamatsu,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Kawamatsu,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Ashura Doji,,Katanas,130,Red Scabbard swordsman
+Ashura Doji,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Ashura Doji,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Kikunojo,,Katanas,130,Red Scabbard swordswoman
+Kikunojo,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Kikunojo,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Brogy,,Polearms,130,Giant warrior captain with a battle axe; filed under Polearms until the dex has an axe group
+Dorry,,Katanas,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Dorry,,Western Swords,130,"Giant warrior captain, swordsman"
+Dorry,,Cane Swords,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Tashigi,,Katanas,130,Marine swordswoman and sword scholar
+Tashigi,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Tashigi,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Lindbergh,,Ranged Weapons,130,Inventor fighting with his own guns
+Morley,,Polearms,120,Carries a giant trident
+Helmeppo,,Western Swords,120,Twin kukri blades
+Hibari,,Ranged Weapons,130,SWORD's sniper
+Gill Bastar,,Ranged Weapons,130,Gunslinger hero of the one-shot Wanted!
+"Kyo ""Silver Axe""",,Polearms,120,Axe fighter by his epithet; filed under Polearms until the dex has an axe group
+Building Snake,,Western Swords,120,Fights with two swords (Film Red)
+Limejuice,,Staves,120,Fights with a rod (Film Red)
+S-Hawk,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+S-Hawk,,Western Swords,140,Clone carrying Mihawk's swordsmanship
+S-Hawk,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Pedro,,Katanas,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Pedro,,Western Swords,130,Jaguar mink swordsman
+Pedro,,Cane Swords,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Vegapunk - Lilith,,Ranged Weapons,120,Fights with a bubble gun
+Gion,,Katanas,130,"Marine swordswoman Momousagi, admiral candidate"
+Gion,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Gion,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Vegapunk - York,,Ranged Weapons,110,Shot Shaka with a pistol
+Shimotsuki Ryuma,,Katanas,150,Wano's Sword God
+Shimotsuki Ryuma,,Western Swords,130,Swordsman (Katanas at 150): skill carries over to other blades
+Shimotsuki Ryuma,,Cane Swords,130,Swordsman (Katanas at 150): skill carries over to other blades
+Bogard,,Katanas,120,"Garp's right hand, swordsman (sword type unclear)"
+Bogard,,Western Swords,120,"Garp's right hand, swordsman (sword type unclear)"
+Sentomaru,,Polearms,130,Fights with a giant battle axe; filed under Polearms until the dex has an axe group
+Kyros,,Katanas,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Kyros,,Western Swords,140,"Undefeated gladiator swordsman, 3000 wins"
+Kyros,,Cane Swords,120,Swordsman (Western Swords at 140): skill carries over to other blades
+Rebecca,,Western Swords,110,"Gladiator with a blunt sword, defensive style"
+Vergo,,Staves,130,Haki-hardened bamboo staff
+Vinsmoke Judge,,Polearms,130,Fights with an electrified spear
+Vinsmoke Niji,,Western Swords,120,"Germa's swordsman, Dengeki Blue"
+Kalgara,,Polearms,130,"Shandia's great warrior, spear fighter"
+Mont Blanc Noland,,Western Swords,120,Swordsman who felled the giant snake of Jaya
+Wyper,,Ranged Weapons,130,Burn Bazooka
+Chaka,,Western Swords,120,"Alabasta royal guard, swordsman"
+Pell,,Western Swords,110,Royal guard carrying a saber
+Charlotte Amande,,Katanas,130,Fights with a nodachi
+Charlotte Amande,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Charlotte Amande,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Diamante,,Katanas,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Diamante,,Western Swords,130,"Hero of the Colosseum, swordsman"
+Diamante,,Cane Swords,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Pica,,Katanas,110,"Carries a long sword, rarely drawn"
+Mr.5 (Gem),,Ranged Weapons,110,Revolver loaded with his explosive breath
+Kumadori,,Staves,120,Shakujo monk staff
+Edward Weevil,,Polearms,140,Fights with a bisento like Whitebeard's
+Curiel,,Ranged Weapons,130,Division commander fighting with firearms
+Fossa,,Katanas,120,Division commander with a flaming sword (sword type unclear)
+Fossa,,Western Swords,120,Division commander with a flaming sword (sword type unclear)
+Rakuyo,,Blunt Weapons,120,Fights with a spiked flail
+Thatch,,Western Swords,120,Division commander with twin swords
+Squard,,Katanas,120,Captain fighting with a long sword (sword type unclear)
+Squard,,Western Swords,120,Captain fighting with a long sword (sword type unclear)
+Boa Marigold,,Polearms,120,Fights with a halberd
+Fukaboshi,,Polearms,130,Trident-wielding prince of the Neptune Army
+Hatchan,,Katanas,120,Six Sword Style (sword type unclear)
+Hatchan,,Western Swords,120,Six Sword Style (sword type unclear)
+T-Bone,,Katanas,110,Swordsman (Western Swords at 130): skill carries over to other blades
+T-Bone,,Western Swords,130,Marine swordsman (right-angle slashes)
+T-Bone,,Cane Swords,110,Swordsman (Western Swords at 130): skill carries over to other blades
+Streusen,,Western Swords,120,Fights with a saber
+Sunbell,,Polearms,120,Trident according to his dex card
+Marguerite,,Ranged Weapons,130,Kuja archer with Haki arrows
+Hyogoro,,Katanas,130,Yakuza boss and veteran swordsman
+Hyogoro,,Western Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Hyogoro,,Cane Swords,110,Swordsman (Katanas at 130): skill carries over to other blades
+Onimaru,,Polearms,130,As Gyukimaru he guards the bridge with a naginata
+Wanda,,Western Swords,120,Musketeer swordswoman
+Arlong,,Western Swords,120,Fights with the saw-sword Kiribachi
+Don Krieg,,Polearms,120,Great Battle Spear
+Don Krieg,,Ranged Weapons,130,Walking arsenal of guns
+Gin,,Blunt Weapons,130,Iron-ball tonfas
+Kurozumi Kanjuro,,Katanas,120,Trained samurai among the Red Scabbards
+King Neptune,,Polearms,130,The Sea God fights with a trident
+Riku Doldo III,,Western Swords,120,Former champion gladiator Ricky
+Koza,,Katanas,110,Rebel leader carrying a sword (sword type unclear)
+Koza,,Western Swords,110,Rebel leader carrying a sword (sword type unclear)
+Oimo and Kashii,,Western Swords,120,Kashii's giant sword
+Oimo and Kashii,,Blunt Weapons,120,Oimo's giant club
+Ohm,,Western Swords,120,"Eisen Whip, a sword of iron cloud"
+Shura,,Polearms,130,Heat Javelin lance
+Alvida,,Blunt Weapons,130,Iron Mace Alvida
+Babe,,Blunt Weapons,130,Four-ton baseball bat
+Gaimon,,Ranged Weapons,110,Guards his island with a pistol
+Igaram,,Ranged Weapons,120,Shotgun saxophone and hair cannons
+Little Oars Jr.,,Western Swords,110,Swung a giant sword at Marineford
+"""Curly"" Dadan",,Polearms,110,Mountain bandit with an axe; filed under Polearms until the dex has an axe group
+Bellmere,,Ranged Weapons,120,Ex-Marine with a rifle
+Zeff,,Weapons,25,Red-Leg Zeff fights only with kicks: a cook's hands are not for combat
+Kuina,,Katanas,120,Dojo prodigy who beat Zoro 2001 times
+Cabaji,,Western Swords,120,Acrobatic swordsman
+Duval,,Ranged Weapons,120,Poisoned harpoon guns
+Wire,,Polearms,120,Fights with a trident
+Conis,,Ranged Weapons,110,Fired a bazooka in Skypiea
+"""Axehand"" Morgan",,Polearms,120,An axe for a hand; filed under Polearms until the dex has an axe group
+Johnny and Yosaku,,Katanas,110,Bounty-hunter swordsmen who lent Zoro their swords (sword type unclear)
+Johnny and Yosaku,,Western Swords,110,Bounty-hunter swordsmen who lent Zoro their swords (sword type unclear)
+Hannyabal,,Polearms,130,Double naginata Kessui
+Speed,,Ranged Weapons,120,Centaur archer
+Stronger,,Weapons,25,A horse cannot hold a weapon
+Abdullah and Jeet,,Katanas,110,Colosseum fighters armed with swords (sword type unclear)
+Abdullah and Jeet,,Western Swords,110,Colosseum fighters armed with swords (sword type unclear)
