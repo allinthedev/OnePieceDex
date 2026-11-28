@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from bd_models.models import BallInstance, Player
+from bd_models.models import BallInstance, Player, balls
 from settings.utils import format_currency
 
 from .access import Access
@@ -70,10 +70,15 @@ class QuestState:
     progress: int = 0
     completed_at: datetime | None = None
     claimed_at: datetime | None = None
+    # a quest waiting on other quests of the pass, and which of them are not done yet
+    locked: bool = False
+    waiting_on: list[str] = field(default_factory=list)
+    # for a quest that draws a target, the treasure this player was given
+    drawn_ball_id: int | None = None
 
     @property
     def target(self) -> int:
-        return max(self.quest.target, 1)
+        return self.quest.goal
 
     @property
     def completed(self) -> bool:
@@ -89,7 +94,14 @@ class QuestState:
 
     @property
     def description(self) -> str:
-        return player_description(self.quest)
+        text = player_description(self.quest)
+        if self.quest.draw_treasure:
+            ball = balls.get(self.drawn_ball_id) if self.drawn_ball_id else None
+            if ball is not None:
+                text = f"{text} **Yours is {ball.country}.**"
+            else:
+                text = f"{text} Yours is drawn the first time you open this pass."
+        return text
 
 
 @dataclass
@@ -279,7 +291,7 @@ async def build_state(
             async for quest in Quest.objects.filter(event_pass=event_pass, enabled=True)
             .select_related("event_pass", "tier", "reward", "ball", "special", "group", "item", "merchant_item")
             .select_related("collector", "tier_level")
-            .prefetch_related(REWARD_LINES)
+            .prefetch_related(REWARD_LINES, "after")
         ]
     quests = list(quests)
     tiers = [
@@ -300,15 +312,25 @@ async def build_state(
                 completed_quest_ids.add(row.quest_id)
         state.final_claimed = await event_pass.players.filter(player=player, final_claimed_at__isnull=False).aexists()
 
+    by_id = {quest.pk: quest for quest in quests}
+
     def quest_state(quest: Quest) -> QuestState:
         period = period_of(quest, now)
         row = progress.get((quest.pk, period))
+        waiting = [
+            by_id[quest_id].name
+            for quest_id in quest.waits_for
+            if quest_id not in completed_quest_ids and quest_id in by_id
+        ]
         return QuestState(
             quest=quest,
             period=period,
             progress=row.progress if row else 0,
             completed_at=row.completed_at if row else None,
             claimed_at=row.claimed_at if row else None,
+            locked=player is not None and not quest.chain_open(completed_quest_ids),
+            waiting_on=waiting,
+            drawn_ball_id=row.drawn_ball_id if row else None,
         )
 
     required = _required_by_tier((quest.pk, quest.tier_id, quest.mandatory, quest.hidden) for quest in quests)

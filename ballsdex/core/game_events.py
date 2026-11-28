@@ -124,6 +124,43 @@ class Event(StrEnum):
     AUCTION_CREATE = "auction_create"  # a player listed a treasure
     AUCTION_BID = "auction_bid"  # a player placed a bid that went through
     AUCTION_WON = "auction_won"  # a player won a listing they bid on
+    AUCTION_SOLD = "auction_sold"  # a player's own listing sold, when they accept an offer
+
+    # -- the advent calendar
+    ADVENT_OPEN = "advent_open"  # a player opened a door, carrying its day and what it cost to buy open
+    ADVENT_COMPLETE = "advent_complete"  # a player opened the last door of the calendar
+
+    # -- the secret santa
+    SANTA_JOIN = "santa_join"  # a player signed up
+    SANTA_WISH = "santa_wish"  # a player filled a slot of their wishlist, carrying how many are filled
+    SANTA_GIFT = "santa_gift"  # a player wrapped their present, as a treasure or paid in the event currency
+    # there is deliberately no event for "somebody wrapped a parcel for you": a player must never learn when or
+    # how their own parcel was filled, and a quest completing at that moment would say it. SANTA_OPEN is the only
+    # thing the receiver is ever told about.
+    SANTA_OPEN = "santa_open"  # a player opened the present they were given
+
+    # -- the sleigh
+    SLEIGH_GIVE = "sleigh_give"  # a player put treasures in the sleigh
+    SLEIGH_FULL = "sleigh_full"  # the sleigh is full, dispatched to everyone who filled it
+
+    # -- crews
+    CREW_JOIN = "crew_join"  # a player joined a crew, or changed crew
+    CREW_POINTS = "crew_points"  # a player scored war points for their crew, carrying how many and for what
+    CREW_WAR_WIN = "crew_war_win"  # a player's crew won a war, dispatched to its members
+
+    # -- poneglyph hunts
+    HUNT_STONE = "hunt_stone"  # a player handed in a set and claimed a stone, for themselves or for their crew
+    HUNT_COMPLETE = "hunt_complete"  # a player holds every stone of a hunt
+
+    # -- wanted posters
+    BOUNTY_CLAIM = "bounty_claim"  # a player was the first to catch a treasure under a live bounty
+
+    # -- the rest of the panel's packages
+    ACHIEVEMENT_UNLOCK = "achievement_unlock"  # a player unlocked an achievement, carrying its category
+    EVENT_SHOP_BUY = "event_shop_buy"  # a player bought something in an event pass's own shop
+    AUGMENT = "augment"  # a player augmented a treasure
+    COLLECTIBLE_BUY = "collectible_buy"  # a player bought a collectible
+    VOTE = "vote"  # a player voted for the bot on a listing site
 
     # -- meta
     ACTIVITY = "activity"  # a player did something, for goals that only need to know they are still playing
@@ -169,6 +206,28 @@ class EventContext:
     # crafting: the collector claimed and the tier level it belongs to ("Craft", "Elemental", "Tier 1"...)
     collector_id: int | None = None
     tier_level_id: int | None = None
+    # an event pass's own currency (snowflakes, cornucopias...) moved by the action, always positive. Kept apart
+    # from `amount` on purpose: a quest counting berries must never be fed a price paid in snowflakes
+    tokens: int = 0
+    # the advent calendar: which door was opened, and how many are open after it
+    day: int = 0
+    # how far the action brought a running total: doors opened, treasures in the sleigh, stones held
+    total: int = 0
+    # crew wars: the points the deed scored, and the name of the deed in the war's own scale
+    points: int = 0
+    deed: str = ""
+    # grand line royale: where the player finished (1 is a win) and how many rounds they lasted
+    place: int = 0
+    rounds: int = 0
+    # boss fights: the damage the player dealt over the whole fight
+    damage: int = 0
+    # battles: how many treasures the player lost, so a flawless win can be told from a close one
+    lost_count: int = 0
+    # the achievement unlocked and the category it belongs to
+    achievement_id: int | None = None
+    category_id: int | None = None
+    # a deed done for a crew rather than for the player alone: a stone claimed in a crew race
+    for_crew: bool = False
     # where the action happened, for goals limited to the main server
     server_id: int | None = None
 

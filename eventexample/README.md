@@ -103,13 +103,26 @@ in UTC: `"2026-10-09T00:01:00Z"`.
 | Key | Meaning |
 | --- | --- |
 | `name`, `emoji`, `description` | An empty description shows the goal generated from the settings |
-| `type` | `catch`, `obtain`, `command`, `trade`, `trade_treasures`, `give_treasures`, `friend`, `battle_win`, `give_currency`, `receive_currency`, `catch_currency`, `spend_currency`, `craft`, `pack_buy`, `merchant_buy`, `shop_buy`, `sell`, `auction_create`, `auction_bid`, `auction_won` |
-| `goal`, `measure` | How much is needed (default 1). `"measure": "amount"` adds berries up instead of counting |
+| `type` — Treasures | `catch`, `obtain`, `own_treasures`, `favorite`, `own_favorites`, `complete_group`, `completion` |
+| `type` — Commands and playing | `command`, `activity`, `playtime`, `vote` |
+| `type` — Players | `trade`, `trade_treasures`, `trade_partners`, `give_treasures`, `give_partners`, `friend` |
+| `type` — Berries | `give_currency`, `receive_currency`, `catch_currency`, `spend_currency`, `own_currency`, `currency_streak`, `leaderboard_rank` |
+| `type` — Shops and crafting | `craft`, `pack_buy`, `pack_streak`, `pack_weekly`, `merchant_buy`, `event_shop_buy`, `shop_buy`, `sell`, `collectible_buy`, `augment` |
+| `type` — Auction house | `auction_create`, `auction_bid`, `auction_won`, `auction_sold` |
+| `type` — Fighting | `battle_win`, `battle_played`, `boss_played`, `boss_win` |
+| `type` — Grand Line Royale | `royale_played`, `royale_win`, `royale_kill`, `royale_chest`, `royale_bounty` |
+| `type` — Christmas | `advent_open`, `advent_complete`, `santa_join`, `santa_wish`, `santa_gift`, `santa_open`, `sleigh_give`, `sleigh_full` |
+| `type` — Crews, hunts and posters | `crew_join`, `in_crew`, `crew_points`, `crew_rank`, `crew_war_win`, `hunt_stone`, `hunt_complete`, `bounty_claim` |
+| `type` — Achievements | `achievement_unlock` |
+| `goal`, `measure` | How much is needed (default 1). `"measure": "amount"` adds an amount up instead of counting: berries for most types, war points for `crew_points`, damage for the boss ones, the event's own currency for `event_shop_buy`. A `complete_group` quest naming a group ignores the goal and uses the size of the group |
 | `mandatory`, `hidden` | Needed to finish the tier / secret until completed |
+| `after`, `after_logic` | The quests of the same pass this one opens after, by name, and `"all"` (default) or `"any"` of them |
+| `shared_with_crew` | `true` puts the counter on the crew instead of the player |
+| `draw_treasure` | `true` draws one treasure out of the quest's own filters for each player |
 | `reset` | `"none"` (default), `"daily"` or `"weekly"` |
 | `claim_required`, `announce`, `completion_message` | As in the admin |
 | `starts_at`, `ends_at`, `enabled`, `notes` | Optional |
-| filters | `ball`, `special`, `any_special`, `group`, `min_rarity`, `max_rarity`, `min_attack_bonus`, `min_health_bonus`, `hex_contains`, `max_catch_seconds`, `main_server_only`, `partner` (Discord ID), `min_currency`, `must_receive_treasure`, `in_one_trade`, `command` (`"pack shop"`), `item` (pack), `merchant_item`, `collector`, `craft_type`. Only the ones the type uses are accepted |
+| filters | `ball`, `special`, `any_special`, `group`, `min_rarity`, `max_rarity`, `min_attack_bonus`, `min_health_bonus`, `hex_contains`, `max_catch_seconds`, `main_server_only`, `partner` (Discord ID), `min_currency`, `must_receive_treasure`, `in_one_trade`, `command` (`"pack shop"`), `item` (pack), `merchant_item`, `collector`, `craft_type`, `with_friend`, `only_if_it_worked`, `on_time` (advent), `for_crew` (hunts), `in_crew_war` (royale), `place` (a ranking, or a royale finish), `min_rounds` (royale), `max_lost` (battles), `unit` (`"days"`, `"months"`, `"years"`), `category` (an achievement category). Only the ones the type uses are accepted |
 | `reward` | See **A reward** below |
 
 Rarity is the value of the treasure, lower is rarer: `"max_rarity": 60` means T60 or rarer.
@@ -144,6 +157,82 @@ pick or a draw**: they are always given, and only the treasures are picked or dr
 A choice is not given right away: it is set aside for the player, who picks it from a menu on `/pass view` whenever
 they want. Nothing is lost if they close the pass first, and it can never be picked twice. A draw avoids repeats
 while the pool is big enough, and only repeats when it is smaller than `pick`.
+
+### The treasure filters, and the "Frame" special
+
+`own_treasures` also takes `craft_type`: a collector card is a treasure wearing that craft's own special, so
+`{"type": "own_treasures", "goal": 3, "craft_type": "Tier 2"}` is "own three Tier 2 collector cards".
+
+`"special": "Frame"` does not look for a special no treasure wears: like everywhere else in the bot, it picks out
+the **framed** treasures, whatever special they carry. So `{"type": "catch", "special": "Frame"}` is "catch a
+framed treasure" and `{"type": "own_treasures", "goal": 5, "special": "Frame"}` is "own five of them".
+
+### Chains, crews and drawn targets
+
+Three settings change *who the counter belongs to* and *when a quest opens*, whatever its type.
+
+**`after` builds a chain.** A quest naming other quests of the same pass is shown locked, says what it waits
+for, and does not progress until they are done — exactly like a quest in a locked tier. The names may belong to
+any tier, including a later one, because the chains are linked once the whole file is read. A quest waiting on
+itself, or a loop of quests waiting on each other, is refused rather than loaded.
+
+```json
+{ "name": "The First Door", "type": "command", "command": "advent view" },
+{ "name": "Now Open It", "type": "advent_open", "after": ["The First Door"] },
+{ "name": "Twenty Doors", "type": "advent_open", "goal": 20, "after": ["Now Open It"] }
+```
+
+A chained quest that is also `mandatory` is still needed to finish its tier: the chain only decides the order
+they are done in, not whether they count.
+
+**`shared_with_crew` hands the counter to the crew.** Every member's deeds add to one total, and it completes
+for all of them:
+
+```json
+{ "name": "A Thousand Between Us", "type": "catch", "goal": 1000, "shared_with_crew": true }
+```
+
+The crew's row is the truth and each member's own progress mirrors it, so claiming, daily resets and tier
+completion work exactly as they do for a quest nobody shares. A member sees the total move when they next do
+something, or when they open the pass. A player **with no crew cannot move it and cannot finish it**, so a
+crew-wide quest should be optional, or the pass should also hold a `crew_join` quest. It is refused on the
+types that read what a player owns, holds or ranks at: those are theirs alone and cannot be added up.
+
+**`draw_treasure` gives every player a different target.** Instead of accepting any treasure matching the
+filters, one of them is drawn for each player and the quest asks for that one:
+
+```json
+{ "name": "Your Mark", "type": "catch", "group": "Logia", "max_rarity": 90, "draw_treasure": true }
+```
+
+The filters are the pool, so a group or a rarity range is required — drawing out of the whole dex hands people
+a target nobody could reasonably catch. The draw is flat, not weighted by rarity, or almost everybody would get
+the commonest treasure in the pool. It happens the first time the player opens the pass, it is kept on their
+progress row, and it never changes: nobody can reroll a target they do not like by waiting. The pass shows them
+which treasure is theirs. Only `catch`, `obtain` and `own_treasures` can draw.
+
+### Quests that read a state
+
+`own_treasures`, `own_favorites`, `own_currency`, `complete_group`, `completion`, `playtime`, `in_crew`,
+`crew_rank` and `leaderboard_rank` do not count an action: they look at what the player has, holds, has completed
+or ranks at. They are re-read whenever something happens that could have changed the answer, and always when the
+player runs `/pass view`. They keep the best figure ever reached, so a quest about holding berries is not undone
+by spending them, and one about a ranking is not lost to somebody overtaking them an hour later.
+
+`playtime` is counted from the player's first catch, which is recorded by the achievements package: without it,
+nobody has a first catch and the quest never moves.
+
+### Quests that count people
+
+`trade_partners` and `give_partners` count **different players**, each one only once however many times they do
+it together, which is the one shape of quest two friends cannot farm between them. The Discord IDs already
+counted are kept on the player's progress row.
+
+### Grand Line Royale and crew wars
+
+A deed in a crew war raid arrives as its own event, so `"in_crew_war": true` asks for the raid and leaving it out
+asks for an ordinary match. The two are never mixed. All of the royale types need the royale bridge to be
+reporting matches (see `KOTS-BRIDGE.md`); nothing breaks without it, the quests simply never move.
 
 ### Who can take part
 

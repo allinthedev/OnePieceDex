@@ -10,8 +10,10 @@ Nothing here knows how a quest progresses: that is `engine.py`, fed by `ballsdex
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
+from achievement_app.models import AchievementCategory, TimeUnit
 from collector_app.models import Collector, CollectorTierLevel
 from currency_app.models import Item
 from django.conf import settings as django_settings
@@ -21,8 +23,22 @@ from django.utils import timezone
 from merchant_app.models import MerchantItem
 
 from ballsdex.core.game_events import normalize_command
-from bd_models.models import Ball, BallGroup, Economy, Player, Regime, Special, balls, groups, specials, wants_no_frame
+from bd_models.models import (
+    Ball,
+    BallGroup,
+    Economy,
+    Player,
+    Regime,
+    Special,
+    balls,
+    groups,
+    is_frame_special,
+    specials,
+    wants_no_frame,
+)
 from settings.models import settings
+
+log = logging.getLogger("eventpass")
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -54,11 +70,68 @@ class QuestType(models.TextChoices):
     CURRENCY_STREAK = "currency_streak", "Reach a daily berry streak"
     PACK_STREAK = "pack_streak", "Reach a daily pack streak"
     OWN_TREASURES = "own_treasures", "Own treasures (how many you have, not what you do)"
+    OWN_FAVORITES = "own_favorites", "Own favorite treasures"
+    OWN_CURRENCY = "own_currency", "Hold berries"
+    COMPLETE_GROUP = "complete_group", "Complete a group"
+    COMPLETION = "completion", "Reach a completion percentage"
+    PLAYTIME = "playtime", "Play for a length of time"
+    LEADERBOARD_RANK = "leaderboard_rank", "Reach a place on the berry leaderboard"
+    FAVORITE = "favorite", "Set favorite treasures"
+    ACTIVITY = "activity", "Play at all (any command)"
+    PACK_WEEKLY = "pack_weekly", "Claim the weekly pack"
+    AUCTION_SOLD = "auction_sold", "Sell treasures on the auction house"
+    TRADE_PARTNERS = "trade_partners", "Trade with different players"
+    GIVE_PARTNERS = "give_partners", "Give to different players"
+    BATTLE_PLAYED = "battle_played", "Take part in battles"
+    BOSS_PLAYED = "boss_played", "Fight a boss"
+    BOSS_WIN = "boss_win", "Win a boss fight"
+    ROYALE_PLAYED = "royale_played", "Play Grand Line Royale matches"
+    ROYALE_WIN = "royale_win", "Win Grand Line Royale matches"
+    ROYALE_KILL = "royale_kill", "Kill in Grand Line Royale"
+    ROYALE_CHEST = "royale_chest", "Open chests in Grand Line Royale"
+    ROYALE_BOUNTY = "royale_bounty", "Claim bounties in Grand Line Royale"
+    ADVENT_OPEN = "advent_open", "Open advent calendar doors"
+    ADVENT_COMPLETE = "advent_complete", "Finish the advent calendar"
+    SANTA_JOIN = "santa_join", "Join the Secret Santa"
+    SANTA_WISH = "santa_wish", "Write a Secret Santa wishlist"
+    SANTA_GIFT = "santa_gift", "Wrap a Secret Santa parcel"
+    SANTA_OPEN = "santa_open", "Open a Secret Santa parcel"
+    SLEIGH_GIVE = "sleigh_give", "Put treasures in the sleigh"
+    SLEIGH_FULL = "sleigh_full", "Fill the sleigh (with everyone else)"
+    CREW_JOIN = "crew_join", "Join a crew"
+    IN_CREW = "in_crew", "Be in a crew"
+    CREW_POINTS = "crew_points", "Score war points for a crew"
+    CREW_RANK = "crew_rank", "Reach a place in the war ranking"
+    CREW_WAR_WIN = "crew_war_win", "Win a crew war"
+    HUNT_STONE = "hunt_stone", "Claim poneglyphs"
+    HUNT_COMPLETE = "hunt_complete", "Finish a hunt"
+    BOUNTY_CLAIM = "bounty_claim", "Take a wanted poster"
+    ACHIEVEMENT_UNLOCK = "achievement_unlock", "Unlock achievements"
+    EVENT_SHOP_BUY = "event_shop_buy", "Buy from an event pass's shop"
+    AUGMENT = "augment", "Augment treasures"
+    COLLECTIBLE_BUY = "collectible_buy", "Buy collectibles"
+    VOTE = "vote", "Vote for the bot"
+
+
+# what a player owns, holds, has completed or ranks at: theirs alone, and never a crew's running total
+SOLITARY_TYPES = frozenset(
+    {
+        QuestType.OWN_TREASURES,
+        QuestType.OWN_FAVORITES,
+        QuestType.OWN_CURRENCY,
+        QuestType.COMPLETE_GROUP,
+        QuestType.COMPLETION,
+        QuestType.PLAYTIME,
+        QuestType.IN_CREW,
+        QuestType.CREW_RANK,
+        QuestType.LEADERBOARD_RANK,
+    }
+)
 
 
 class Measure(models.TextChoices):
     COUNT = "count", "Number of times"
-    AMOUNT = "amount", "Total berries"
+    AMOUNT = "amount", "Total amount (berries, points, damage...)"
 
 
 class Reset(models.TextChoices):
@@ -888,8 +961,95 @@ class Quest(models.Model):
         help_text='Only count crafts of this kind ("Craft", "Elemental"...). Leave empty for any.',
     )
     tier_level_id: int | None
+    achievement_category = models.ForeignKey(
+        AchievementCategory,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Only count achievements of this category. Leave empty for any.",
+    )
+    achievement_category_id: int | None
+    time_unit = models.CharField(
+        max_length=8,
+        choices=TimeUnit.choices,
+        default=TimeUnit.DAYS,
+        help_text="The unit the goal is counted in, for a quest about how long the player has been playing.",
+    )
+    on_time = models.BooleanField(
+        verbose_name="only on the day",
+        default=False,
+        help_text="Only count an advent door opened on its own day, not one bought open afterwards with "
+        "/advent catchup.",
+    )
+    for_crew = models.BooleanField(
+        verbose_name="only for a crew",
+        default=False,
+        help_text="Only count it when the deed was done for a crew rather than for the player alone: a poneglyph "
+        "claimed in a hunt run as a race between crews.",
+    )
+    in_crew_war = models.BooleanField(
+        verbose_name="only in a crew war",
+        default=False,
+        help_text="Only count a Grand Line Royale deed done in a crew war raid. Left unchecked, only ordinary "
+        "matches count — the two are never mixed, so a quest always says which it means.",
+    )
+    max_place = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="place to reach",
+        help_text="The place to finish at or above, 1 being the best: 3 is a podium, 10 a top ten. Used by the "
+        "ranking quests and by the Grand Line Royale ones.",
+    )
+    min_rounds = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Only count a Grand Line Royale match the player lasted this many rounds in."
+    )
+    max_lost = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="treasures lost at most",
+        help_text="Only count a battle where the player lost at most this many treasures. 0 asks for a flawless "
+        "win. A forfeit always counts as one loss.",
+    )
+
+    # -- how the quest behaves, rather than what it counts
+    after = models.ManyToManyField(
+        "self",
+        symmetrical=False,
+        blank=True,
+        # "unlocks" is taken: it is what a quest does to the tiers waiting on it (TierRequirement.quests)
+        related_name="opens",
+        verbose_name="opens after",
+        help_text="The quests that have to be completed before this one opens. A quest still shut is shown "
+        "locked, says what it waits for, and does not progress \u2014 exactly like a quest in a locked tier. "
+        "Leave empty for a quest open from the start.",
+    )
+    after_logic = models.CharField(
+        max_length=3,
+        choices=Logic.choices,
+        default=Logic.ALL,
+        verbose_name="opens after (logic)",
+        help_text="Whether every quest above has to be completed, or any one of them.",
+    )
+    shared_with_crew = models.BooleanField(
+        verbose_name="counted for the whole crew",
+        default=False,
+        help_text="The progress belongs to the crew, not to the player: every member's deeds add to one counter, "
+        "and it completes for all of them. A player with no crew cannot move it, and cannot finish it. Only for "
+        "the quests that count an action \u2014 what a player owns or ranks at is theirs alone.",
+    )
+    draw_treasure = models.BooleanField(
+        verbose_name="draw a target for each player",
+        default=False,
+        help_text="Instead of accepting any treasure matching the filters, one of them is drawn for each player "
+        "and the quest asks for that one. The filters are the pool it is drawn from, so a group or a rarity "
+        "range is needed. Nobody can copy anybody's answer, which is the point. Catch, obtain and own only.",
+    )
 
     notes = models.TextField(blank=True, default="", help_text="Internal notes, never shown to players.")
+
+    # the types a drawn target makes sense for: the ones whose goal is a treasure in the first place
+    DRAWABLE = (QuestType.CATCH, QuestType.OBTAIN, QuestType.OWN_TREASURES)
 
     def clean(self):
         super().clean()
@@ -900,6 +1060,76 @@ class Quest(models.Model):
             raise ValidationError({"tier": "This tier belongs to another pass."})
         if self.min_rarity is not None and self.max_rarity is not None and self.min_rarity > self.max_rarity:
             raise ValidationError({"max_rarity": "The maximum rarity must be above the minimum."})
+        if self.draw_treasure:
+            if self.type not in self.DRAWABLE:
+                raise ValidationError(
+                    {"draw_treasure": "Only a catch, obtain or own quest can have a target drawn for it."}
+                )
+            if self.ball_id:
+                raise ValidationError(
+                    {"draw_treasure": "This quest already names a treasure, so there is nothing to draw."}
+                )
+            if not self.group_id and self.min_rarity is None and self.max_rarity is None:
+                raise ValidationError(
+                    {
+                        "draw_treasure": "Say what to draw from: a group, a rarity range, or both. Drawing out of "
+                        "the whole dex gives players a target nobody could reasonably catch."
+                    }
+                )
+        if self.shared_with_crew:
+            if self.draw_treasure:
+                raise ValidationError(
+                    {"shared_with_crew": "A target drawn per player cannot be counted for a whole crew."}
+                )
+            if self.type in SOLITARY_TYPES:
+                raise ValidationError(
+                    {
+                        "shared_with_crew": "This type reads what the player has, holds or ranks at, which is "
+                        "theirs alone and cannot be added up across a crew."
+                    }
+                )
+
+    @property
+    def waits_for(self) -> list[int]:
+        """
+        The quests that have to be completed before this one opens, by id.
+
+        Read from the prefetched relation and never from the database: both paths that load a quest for the
+        engine or for the pass view prefetch `after`, because reading a relation lazily from async code is not
+        allowed. A quest loaded without it reads as waiting for nothing, which lets it through rather than
+        hiding it for good, and says so in the log.
+        """
+        if "after" not in getattr(self, "_prefetched_objects_cache", {}):
+            if self.pk:
+                log.debug("Quest %s was loaded without its chain: treating it as open", self.pk)
+            return []
+        return [quest.pk for quest in self.after.all()]
+
+    def chain_open(self, completed_quest_ids: set[int]) -> bool:
+        """
+        Whether the quests this one waits for have been completed, by the player the ids come from.
+        """
+        waiting = self.waits_for
+        if not waiting:
+            return True
+        if self.after_logic == Logic.ANY:
+            return any(quest_id in completed_quest_ids for quest_id in waiting)
+        return all(quest_id in completed_quest_ids for quest_id in waiting)
+
+    @property
+    def goal(self) -> int:
+        """
+        How much progress the quest actually needs, which is what the engine and the pass view both read.
+
+        Almost always the goal set in the panel. A quest asking for a whole group is the exception: there the
+        goal is the size of the group, so nobody has to keep a number in step by hand, and a treasure added
+        to a group simply makes the quest longer rather than leaving it finished at the old figure.
+        """
+        if self.type == QuestType.COMPLETE_GROUP and self.group_id:
+            group = groups.get(self.group_id)
+            if group is not None and group._ball_ids:
+                return len(group._ball_ids)
+        return max(self.target, 1)
 
     @property
     def cached_ball(self) -> Ball | None:
@@ -933,7 +1163,12 @@ class Quest(models.Model):
         if self.ball_id and instance.ball_id != self.ball_id:
             return False
         if self.special_id:
-            if instance.special_id != self.special_id:
+            # the "Frame" special is never worn by a treasure: it selects the framed ones, whatever their
+            # special, exactly as it does in every other filter of the bot
+            if is_frame_special(self.cached_special):
+                if not instance.framed:
+                    return False
+            elif instance.special_id != self.special_id:
                 return False
         elif self.any_special and instance.special_id is None:
             return False
@@ -1013,6 +1248,22 @@ class PlayerQuest(models.Model):
         max_length=16, blank=True, default="", help_text='Empty for a one-off quest, "2026-09-20" for a daily one.'
     )
     progress = models.PositiveBigIntegerField(default=0, help_text="How far the player is, against the goal.")
+    seen = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="For the quests counting different people rather than actions: the Discord IDs already counted, "
+        "so trading with the same player twice only ever counts once.",
+    )
+    drawn_ball = models.ForeignKey(
+        Ball,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="For a quest that draws a target: the treasure this player was given. Drawn once and never "
+        "again, so nobody can reroll a target they do not like by waiting.",
+    )
+    drawn_ball_id: int | None
     completed_at = models.DateTimeField(null=True, blank=True, help_text="When the goal was reached.")
     claimed_at = models.DateTimeField(null=True, blank=True, help_text="When the reward was handed over.")
 
@@ -1035,6 +1286,35 @@ class PlayerQuest(models.Model):
             models.Index(fields=("player", "quest"), name="eventpass_pq_player_idx"),
             models.Index(fields=("quest", "completed_at"), name="eventpass_pq_done_idx"),
         ]
+
+
+class CrewQuest(models.Model):
+    """
+    The progress of one crew on one quest, for the quests counted for a whole crew.
+
+    This row is the truth; each member's own `PlayerQuest` mirrors it, so claiming a reward, resetting a period
+    and everything else works exactly as it does for a quest nobody shares. A member sees the counter move when
+    they next do something, or when they open the pass.
+    """
+
+    quest = models.ForeignKey(Quest, on_delete=models.CASCADE, related_name="crew_progress")
+    quest_id: int
+    crew = models.ForeignKey("crew_app.Crew", on_delete=models.CASCADE, related_name="event_pass_quests")
+    crew_id: int
+    period = models.CharField(
+        max_length=16, blank=True, default="", help_text='Empty for a one-off quest, "2026-09-20" for a daily one.'
+    )
+    progress = models.PositiveBigIntegerField(default=0, help_text="How far the crew is, against the goal.")
+    completed_at = models.DateTimeField(null=True, blank=True, help_text="When the crew reached the goal.")
+
+    def __str__(self) -> str:
+        return f"{self.quest_id} for crew {self.crew_id}"
+
+    class Meta:
+        managed = True
+        db_table = "eventpasscrewquest"
+        unique_together = (("quest", "crew", "period"),)
+        indexes = [models.Index(fields=("quest", "crew"), name="eventpass_cq_quest_idx")]
 
 
 class RewardGrant(models.Model):

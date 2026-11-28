@@ -497,6 +497,14 @@ class BallSpawnView(LayoutView):
             await bounty.arelease()
             return None
         await score_quietly(player.pk, CrewWarRule.Source.BOUNTY_CLAIMED)
+        # only the first catch ever gets here, so this is the event for "be the one who took the poster"
+        bus.dispatch_soon(
+            player,
+            Event.BOUNTY_CLAIM,
+            context=EventContext(
+                instances=[ball], amount=bounty.reward, price=bounty.reward, server_id=ball.server_id
+            ),
+        )
         log.info(
             "%s (%s) claimed the bounty on %s for %s",
             user,

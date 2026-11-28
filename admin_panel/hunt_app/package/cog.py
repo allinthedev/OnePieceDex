@@ -18,6 +18,7 @@ from discord.ext import commands, tasks
 from django.db import IntegrityError
 from django.utils import timezone
 
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels
 from ballsdex.core.utils.buttons import ConfirmChoiceView
 from bd_models.models import BallInstance, Player
@@ -389,6 +390,11 @@ class HuntCog(commands.Cog):
         await score_quietly(player.pk, CrewWarRule.Source.PONEGLYPH_CLAIMED)
         total = await hunt.poneglyphs.acount()
         held = len(await stones_held(hunt, player, crew))
+        await bus.dispatch(
+            player,
+            Event.HUNT_STONE,
+            context=EventContext(total=held, for_crew=bool(hunt.is_crew_hunt and crew), server_id=server_id),
+        )
         lines.append(f"{emoji} {held}/{total}")
         if held >= total:
             lines.append(await self.finish(hunt, player, crew, server_id))
@@ -468,6 +474,17 @@ class HuntCog(commands.Cog):
             lines.append(f"-# {others} other member(s) of {crew.name} were paid their share.")
 
         await score_quietly(player.pk, CrewWarRule.Source.HUNT_COMPLETED)
+        # everyone paid a share is told, not only whoever handed the last set in: on a crew hunt the
+        # hunt was finished by the crew, and that is what a quest asking for one should pay for
+        for paid in sorted((cards | set(money)) | {player.pk}):
+            try:
+                await bus.dispatch(
+                    paid,
+                    Event.HUNT_COMPLETE,
+                    context=EventContext(for_crew=bool(hunt.is_crew_hunt and crew), server_id=server_id),
+                )
+            except Exception:
+                log.exception("hunt: could not say that %s was finished for player %s", hunt.name, paid)
         if hunt.announce_completion:
             await self.announce_completion(hunt, player, crew, claimers)
         log.info(

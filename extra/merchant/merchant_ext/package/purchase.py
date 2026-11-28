@@ -204,6 +204,19 @@ async def buy_item(
             server_id=server_id,
         ),
     )
+    if in_currency:
+        # the same purchase said a second way: paid out of an event pass's own purse rather than in berries,
+        # which is the one thing a quest about that pass's shop wants to count
+        await bus.dispatch(
+            player,
+            Event.EVENT_SHOP_BUY,
+            context=EventContext(
+                instances=[bought] if isinstance(bought, BallInstance) else [],
+                merchant_item_id=item.pk,
+                tokens=price,
+                server_id=server_id,
+            ),
+        )
     return bought
 
 

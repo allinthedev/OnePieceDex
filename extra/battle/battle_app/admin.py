@@ -2,7 +2,18 @@ from typing import TYPE_CHECKING
 
 from django.contrib import admin
 
-from .models import BattleItem, BattleRecord, BattleSession, BattleSettings, Buff, Matchup, PlayerBattleItem
+from .models import (
+    BattleItem,
+    BattleRecord,
+    BattleSession,
+    BattleSettings,
+    Buff,
+    EquipAffinity,
+    EquipResistance,
+    GroupMatchup,
+    Matchup,
+    PlayerBattleItem,
+)
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -11,12 +22,38 @@ if TYPE_CHECKING:
 @admin.register(Buff)
 class BuffAdmin(admin.ModelAdmin):
     autocomplete_fields = ("ball", "special")
-    list_display = ("display", "health", "attack")
+    list_display = ("display", "health", "attack", "capacity_summary")
+    list_filter = ("capacity_effect",)
     search_fields = ("ball__country", "special__name")
+    fieldsets = [
+        (
+            None,
+            {
+                "description": "Set either a treasure or a special, never both. A row on a special applies to "
+                "every treasure of it that has no row of its own.",
+                "fields": ["ball", "special", "health", "attack"],
+            },
+        ),
+        (
+            "Capacity",
+            {
+                "description": "What this treasure's Capacity does in a battle. Its <b>name</b> comes from the "
+                "treasure itself (Treasures, “capacity name”) and every treasure already has one; only "
+                "the effect is set here. Left on the plain special attack, Capacity hits for the default "
+                "multiplier in the battle settings.",
+                "fields": ["capacity_effect", "capacity_value"],
+            },
+        ),
+    ]
+
+    @admin.display(description="Capacity")
+    def capacity_summary(self, obj: Buff) -> str:
+        return obj.capacity_summary
 
 
 @admin.register(BattleSettings)
 class BattleSettingsAdmin(admin.ModelAdmin):
+    autocomplete_fields = ("character_group", "weapon_group", "fruit_group")
     fieldsets = [
         (
             "Combat",
@@ -42,10 +79,13 @@ class BattleSettingsAdmin(admin.ModelAdmin):
             "Tier-based damage scaling",
             {
                 "description": (
-                    "Tier = rounded rarity. A lower rarity number is a rarer/stronger card, so "
-                    "\"enemy is a tier higher\" means the enemy is rarer than your attacker."
+                    "A tier is a band of rarities, cut by the bounds below. A lower rarity number is a rarer "
+                    "card, so \"enemy is a tier higher\" means the enemy is rarer than your attacker. The "
+                    "multipliers run from 0.9 to 1.0 by default: a gap in rarity never costs more than 10% of "
+                    "the damage."
                 ),
                 "fields": [
+                    "tier_bounds",
                     "tier_same_multiplier",
                     "tier_enemy_1_higher_multiplier",
                     "tier_enemy_2plus_higher_multiplier",
@@ -60,6 +100,26 @@ class BattleSettingsAdmin(admin.ModelAdmin):
             {
                 "description": "Flat ATK/HP bonuses for special cards in battle, matching /boss fights.",
                 "fields": ["haki_special_bonus", "shiny_special_bonus", "mythical_special_bonus"],
+            },
+        ),
+        (
+            "Equipment",
+            {
+                "description": (
+                    "Only characters fight; a weapon and a devil fruit are attached to them. Which treasure "
+                    "plays which part is read from its groups. The share of an item's stats each character "
+                    "gets is set line by line in <b>Equip affinities</b>; the default below only applies "
+                    "when no line there says anything about the pair."
+                ),
+                "fields": [
+                    "character_group",
+                    "weapon_group",
+                    "fruit_group",
+                    "default_equip_percent",
+                    "full_set_bonus_percent",
+                    "resistance_floor",
+                    "resistance_ceiling",
+                ],
             },
         ),
         (
@@ -84,11 +144,80 @@ class BattleSettingsAdmin(admin.ModelAdmin):
         return False
 
 
+@admin.register(EquipAffinity)
+class EquipAffinityAdmin(admin.ModelAdmin):
+    """
+    The share of an item's stats a character gets. The most precise line wins: a character with an exact
+    item, then a character with a kind of item, then a kind of item for anybody.
+    """
+
+    autocomplete_fields = ("character", "item", "item_group")
+    list_display = ("who", "what", "percent", "layer", "note")
+    list_editable = ("percent",)
+    list_filter = ("item_group",)
+    list_select_related = ("character", "item", "item_group")
+    search_fields = ("character__country", "item__country", "item_group__name", "note")
+    list_per_page = 100
+
+    @admin.display(description="Character", ordering="character__country")
+    def who(self, obj: EquipAffinity) -> str:
+        return obj.character.country if obj.character_id else "Anybody"
+
+    @admin.display(description="Item")
+    def what(self, obj: EquipAffinity) -> str:
+        return obj.item.country if obj.item_id else f"any of “{obj.item_group}”"
+
+    @admin.display(description="Layer")
+    def layer(self, obj: EquipAffinity) -> str:
+        if obj.character_id and obj.item_id:
+            return "2 · their own item"
+        if obj.character_id:
+            return "3 · a kind they master"
+        return "1 · default of a kind"
+
+
+@admin.register(EquipResistance)
+class EquipResistanceAdmin(admin.ModelAdmin):
+    """What a defender's equipment does to the damage coming in, depending on what the attacker wears."""
+
+    autocomplete_fields = ("character", "equipped_item", "against_item", "against_group")
+    list_display = ("__str__", "multiplier", "note")
+    list_editable = ("multiplier",)
+    list_filter = ("against_group",)
+    list_select_related = ("character", "equipped_item", "against_item", "against_group")
+    search_fields = (
+        "character__country",
+        "equipped_item__country",
+        "against_item__country",
+        "against_group__name",
+        "note",
+    )
+    list_per_page = 100
+
+
 @admin.register(Matchup)
 class MatchupAdmin(admin.ModelAdmin):
+    """
+    Who beats whom, whatever they wear: this attacker against this defender. A line here always wins over
+    the bond of a group the two share.
+    """
+
     autocomplete_fields = ("attacker", "defender")
-    list_display = ("attacker", "defender", "damage_multiplier")
-    search_fields = ("attacker__country", "defender__country")
+    list_display = ("attacker", "defender", "damage_multiplier", "note")
+    list_editable = ("damage_multiplier",)
+    list_select_related = ("attacker", "defender")
+    search_fields = ("attacker__country", "defender__country", "note")
+
+
+@admin.register(GroupMatchup)
+class GroupMatchupAdmin(admin.ModelAdmin):
+    """A bond between the members of one group, applied when both fighters belong to it."""
+
+    autocomplete_fields = ("group",)
+    list_display = ("group", "damage_multiplier", "note")
+    list_editable = ("damage_multiplier",)
+    list_select_related = ("group",)
+    search_fields = ("group__name", "note")
 
 
 @admin.register(BattleRecord)

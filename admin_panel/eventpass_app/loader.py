@@ -13,6 +13,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
+from achievement_app.models import AchievementCategory, TimeUnit
 from collector_app.models import Collector, CollectorTierLevel
 from currency_app.models import Item
 from django.db import models
@@ -23,6 +24,7 @@ from ballsdex.core.game_events import normalize_command
 from bd_models.models import Ball, BallGroup, Economy, Regime, Special, frame_entry, wants_no_frame
 
 from .models import (
+    SOLITARY_TYPES,
     AccessKind,
     Announce,
     BonusMode,
@@ -103,6 +105,10 @@ QUEST_KEYS = {
     "ends_at",
     "notes",
     "reward",
+    "after",
+    "after_logic",
+    "shared_with_crew",
+    "draw_treasure",
 }
 REWARD_KEYS = {"cards", "tokens", "currency", "berries", "mode", "pick", "offer", "pool", "frame_key"}
 POOL_KEYS = {"group", "regime", "economy", "min_rarity", "max_rarity", "exclude", "quantity"}
@@ -113,6 +119,9 @@ ALIASES = {
     "command": "command_name",
     "craft_type": "tier_level",
     "only_if_it_worked": "require_command_effect",
+    "category": "achievement_category",
+    "place": "max_place",
+    "unit": "time_unit",
 }
 FILTER_NAMES = set(PARAMETER_FIELDS) | set(ALIASES)
 
@@ -131,6 +140,9 @@ class PassLoader:
         self.token: Ball | None = None
         self.card_special: Special | None = None
         self._tokens: defaultdict[str, int] = defaultdict(int)
+        # the quest chains, kept aside until every quest of the pass exists: a quest may wait on one declared
+        # further down the file, in a later tier
+        self._chains: list[tuple[Quest, list[str]]] = []
 
     # -- lookups -----------------------------------------------------------------------------------------------------
 
@@ -237,11 +249,56 @@ class PassLoader:
 
         for position, tier_data in enumerate(data.get("tiers", []), start=1):
             self._tier(event_pass, position, tier_data)
+        self._link_chains(event_pass)
 
         token_lines = [f"{tier} {count}" for tier, count in self._tokens.items()]
         if token_lines:
             self.report.append(f"Tokens given: {', '.join(token_lines)} ({sum(self._tokens.values())} in total).")
         return event_pass
+
+    def _link_chains(self, event_pass: EventPass) -> None:
+        """
+        Attach each quest to the quests it waits for, now that all of them exist.
+
+        Done in one pass at the end so a quest can wait on one declared further down the file. A quest that
+        waits on itself, directly or through a loop, would never open, so the loop is refused rather than
+        loaded: a tier nobody can finish is worse than a file that will not load.
+        """
+        if not self._chains:
+            return
+        by_name = {quest.name: quest for quest in Quest.objects.filter(event_pass=event_pass)}
+        waits: dict[int, set[int]] = {}
+        for quest, names in self._chains:
+            found = []
+            for name in names:
+                other = by_name.get(name)
+                if other is None:
+                    self._missing("quest", name)
+                elif other.pk == quest.pk:
+                    self.errors.append(f'Quest "{quest.name}" cannot wait for itself.')
+                else:
+                    found.append(other)
+            quest.after.set(found)
+            waits[quest.pk] = {other.pk for other in found}
+            if found:
+                self.report.append(f"  {quest.name} opens after {', '.join(other.name for other in found)}.")
+
+        # a loop is found by walking each chain back through everything it waits for
+        names = {quest.pk: quest.name for quest in by_name.values()}
+        for start, earliest in waits.items():
+            seen: set[int] = set()
+            stack = list(earliest)
+            while stack:
+                current = stack.pop()
+                if current == start:
+                    self.errors.append(
+                        f'Quest "{names.get(start, start)}" is in a loop of quests waiting for each other.'
+                    )
+                    break
+                if current in seen:
+                    continue
+                seen.add(current)
+                stack.extend(waits.get(current, ()))
 
     def _tier(self, event_pass: EventPass, position: int, data: dict[str, Any]) -> None:
         name = data.get("name", "")
@@ -352,6 +409,32 @@ class PassLoader:
             if key in data and data[key] not in choices.values:
                 self.errors.append(f"{where}: {key} is one of {', '.join(choices.values)}.")
 
+        after_logic = data.get("after_logic", Logic.ALL)
+        if after_logic not in Logic.values:
+            self.errors.append(f"{where}: after_logic is one of {', '.join(Logic.values)}.")
+            after_logic = Logic.ALL
+        shared = data.get("shared_with_crew", False)
+        if shared and quest_type in SOLITARY_TYPES:
+            self.errors.append(
+                f'{where}: a "{definition.type.label}" quest reads what the player has or ranks at, which '
+                "cannot be added up across a crew."
+            )
+            shared = False
+        drawn = data.get("draw_treasure", False)
+        if drawn:
+            if quest_type not in Quest.DRAWABLE:
+                self.errors.append(f"{where}: only a catch, obtain or own quest can draw a target.")
+                drawn = False
+            elif not (data.get("group") or data.get("min_rarity") or data.get("max_rarity")):
+                self.errors.append(
+                    f"{where}: say what to draw from — a group, a rarity range, or both. Drawing out of the "
+                    "whole dex gives players a target nobody could reasonably catch."
+                )
+                drawn = False
+            elif shared:
+                self.errors.append(f"{where}: a target drawn per player cannot be counted for a whole crew.")
+                drawn = False
+
         hidden = data.get("hidden", False)
         reward_spec = data.get("reward")
         tokens_counted_in = f"{tier.name}{' secret' if hidden else ''}"
@@ -374,12 +457,20 @@ class PassLoader:
                 "starts_at": self._date(data.get("starts_at"), where),
                 "ends_at": self._date(data.get("ends_at"), where),
                 "notes": data.get("notes", ""),
+                "after_logic": after_logic,
+                "shared_with_crew": shared,
+                "draw_treasure": drawn,
                 "reward": (
                     self._reward(f"{event_pass.name} · {name}", reward_spec, tokens_counted_in) if reward_spec else None
                 ),
             }
         )
         quest, _ = Quest.objects.update_or_create(event_pass=event_pass, name=name, defaults=fields)
+        # a chain removed from the file is removed from the quest, like every other setting
+        after = data.get("after") or []
+        if isinstance(after, str):
+            after = [after]
+        self._chains.append((quest, list(after)))
         return quest
 
     def _filter_value(self, field_name: str, value: Any) -> Any:
@@ -400,6 +491,13 @@ class PassLoader:
                 return self._by_name(CollectorTierLevel, "craft type", value)
             case "command_name":
                 return normalize_command(value)
+            case "achievement_category":
+                return self._by_name(AchievementCategory, "achievement category", value)
+            case "time_unit":
+                if value not in TimeUnit.values:
+                    self.errors.append(f"The time unit is one of {', '.join(TimeUnit.values)}, not {value!r}.")
+                    return TimeUnit.DAYS
+                return value
         return value
 
     def _access(self, event_pass: EventPass, data: dict[str, Any]) -> None:

@@ -10,6 +10,7 @@ from discord.ext import commands, tasks
 from django.db.models import Sum
 from django.utils import timezone
 
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels
 from ballsdex.core.utils.checks import app_check, has_permissions
 from ballsdex.core.utils.leaderboard import EXTRA_ROWS, LEADERBOARD_SIZE, send_leaderboard
@@ -629,6 +630,31 @@ class CrewCog(commands.GroupCog, group_name="crew"):
                 await self.announce_result(war)
             except Exception:
                 log.exception("crew war: could not announce the result of %s", war.name)
+            await self.tell_the_winners(war)
+
+    async def tell_the_winners(self, war: CrewWar) -> None:
+        """
+        Say on the bus that the winning crew won, once per war, to each of its members.
+
+        The flag flown now is what counts, like the crew rungs of the ladder: the reward for
+        winning goes to the people wearing the colours at the end. A failure here never undoes
+        the payout or the announcement, both of which already happened.
+        """
+        try:
+            table = await standings(war)
+            if not table:
+                return
+            winner_id = table[0][0]
+            members = [
+                member
+                async for member in CrewMembership.objects.filter(crew_id=winner_id).values_list(
+                    "player_id", flat=True
+                )
+            ]
+            for member in members:
+                await bus.dispatch(member, Event.CREW_WAR_WIN, context=EventContext(points=table[0][1]))
+        except Exception:
+            log.exception("crew war: could not tell the winners of %s", war.name)
 
     async def announce_result(self, war: CrewWar) -> None:
         """The end of a war, in the spawn channels its scope allows."""

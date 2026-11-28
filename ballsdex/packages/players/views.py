@@ -24,6 +24,7 @@ from discord.ui import (
 from discord.utils import format_dt
 
 from ballsdex.core.discord import Modal, View
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.buttons import ConfirmChoiceView
 from ballsdex.core.utils.emojis import usable_emoji
 from bd_models.models import (
@@ -465,6 +466,13 @@ class SettingsContainer(Container):
             # the crew's Discord role follows the choice, on the main server and nowhere else.
             # It never raises: a role the bot cannot hand over must not break picking a crew.
             await apply_crew_role(interaction.client, interaction.user.id, picked)
+            if picked is not None and (current is None or current.pk != picked.pk):
+                await bus.dispatch(
+                    player,
+                    Event.CREW_JOIN,
+                    context=EventContext(server_id=interaction.guild_id),
+                    channel_id=interaction.channel_id,
+                )
             self._configure_crew(player, crews, picked, page)
             await interaction.response.edit_message(view=self.view)
 

@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from augment_app import formulas
 from augment_app.models import AugmentSettings
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.buttons import ConfirmChoiceView
 from ballsdex.core.utils.transformers import BallInstanceTransform
 from bd_models.models import Player
@@ -88,6 +89,16 @@ class Augment(commands.Cog):
 
         result_embed = self._build_result_embed(countryball, player, success, attack_delta, health_delta)
         await interaction.followup.send(embed=result_embed, ephemeral=True)
+        # the card goes with the event, with its new stats, so a quest can ask for a card augmented past a
+        # bonus rather than only for the attempt
+        await bus.dispatch(
+            player,
+            Event.AUGMENT,
+            context=EventContext(
+                instances=[countryball], amount=-price, price=price, server_id=interaction.guild_id
+            ),
+            channel_id=interaction.channel_id,
+        )
 
     def _build_prompt_embed(
         self,

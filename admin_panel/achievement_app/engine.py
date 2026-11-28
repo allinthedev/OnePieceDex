@@ -24,7 +24,7 @@ from django.db.models import Count, Q
 from django.db.models.expressions import RawSQL
 from django.utils import timezone
 
-from ballsdex.core.game_events import Event, EventContext
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.background import run_on_bot_loop
 from bd_models.models import BallInstance, Friendship, Player, balls, groups
 
@@ -109,7 +109,34 @@ class AchievementEngine:
             return []
         if unlocked and self.notifier:
             await self.notifier.add(player_id, unlocked, channel_id)
+        await self._announce(player_id, unlocked, event, channel_id)
         return unlocked
+
+    async def _announce(
+        self, player_id: int, unlocked: list[Achievement], event: Event, channel_id: int | None
+    ) -> None:
+        """
+        Say on the bus that achievements were unlocked, so other systems can pay for them.
+
+        Never said for an unlock that an unlock itself set off: the playtime achievement listens to every
+        event there is, so that is the one way this could come back round.
+        """
+        if not unlocked or event == Event.ACHIEVEMENT_UNLOCK:
+            return
+        for achievement in unlocked:
+            try:
+                await bus.dispatch(
+                    player_id,
+                    Event.ACHIEVEMENT_UNLOCK,
+                    context=EventContext(
+                        achievement_id=achievement.pk,
+                        category_id=achievement.category_id,
+                        amount=achievement.currency_reward,
+                    ),
+                    channel_id=channel_id,
+                )
+            except Exception:
+                log.exception("Could not announce achievement %s of player %s", achievement.pk, player_id)
 
     async def sync_player(self, player: Player | int) -> list[Achievement]:
         """
@@ -123,7 +150,9 @@ class AchievementEngine:
             return []
         player_id = player if isinstance(player, int) else player.pk
         async with self._locks[player_id]:
-            return await self._process(player_id, Event.SYNC, EventContext())
+            unlocked = await self._process(player_id, Event.SYNC, EventContext())
+        await self._announce(player_id, unlocked, Event.SYNC, None)
+        return unlocked
 
     def dispatch_soon(
         self, player_id: int, event: Event, *, context: EventContext | None = None, channel_id: int | None = None

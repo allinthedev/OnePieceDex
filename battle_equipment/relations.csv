@@ -1,0 +1,15 @@
+attacker,defender,group,multiplier,note
+,,Whitebeard Pirates,0.5,Brothers of one family: they hold back against each other
+,,Straw Hats,0.75,Crewmates do not go all out against each other
+Vinsmoke Sanji,Roronoa Zoro,,1.2,Rivals: squabbling fires them both up
+Roronoa Zoro,Vinsmoke Sanji,,1.2,Rivals: squabbling fires them both up
+Cavendish,Bartolomeo,,1.2,Rivals: squabbling fires them both up
+Bartolomeo,Cavendish,,1.2,Rivals: squabbling fires them both up
+Gol D. Roger,Edward Newgate (Whitebeard),,1.2,Lifelong rivals who fought as equals
+Edward Newgate (Whitebeard),Gol D. Roger,,1.2,Lifelong rivals who fought as equals
+"""Red-Haired"" Shanks","Eustass ""Captain"" Kidd",,1.2,Shanks defeated Kidd twice
+Sakazuki (Akainu),Portgas D. Ace,,1.3,Akainu killed Ace at Marineford
+Boa Hancock,Monkey D. Luffy,,0.1,In love with Luffy: she can hardly bring herself to strike him
+"Donquixote Rosinante ""Corazon""",Trafalgar D. Water Law,,0.1,Gave his life to save Law
+Bepo,Trafalgar D. Water Law,,0.1,Friends since childhood: neither would hurt the other
+Trafalgar D. Water Law,Bepo,,0.1,Friends since childhood: neither would hurt the other

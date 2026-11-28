@@ -1,0 +1,53 @@
+character,equipped_item,against_item,against_group,multiplier,note
+,Gomu Gomu no Mi (Gum Gum),Goro Goro no Mi (Thunder Thunder),,0.25,Rubber does not conduct lightning: Enel could not hurt Luffy
+,Gomu Gomu no Mi (Gum Gum),,Blunt Weapons,0.5,A rubber body shrugs off blunt impacts
+,Gomu Gomu no Mi (Gum Gum),,Staves,0.5,"Staff blows are blunt impacts, and rubber insulates from the Clima-Tact's lightning"
+,Gomu Gomu no Mi (Gum Gum),,Ranged Weapons,0.5,Bullets and cannonballs bounce off rubber
+,Goro Goro no Mi (Thunder Thunder),Gomu Gomu no Mi (Gum Gum),,1.5,A lightning body cannot slip through rubber: its natural enemy
+,Mera Mera no Mi (Fire Fire),Magu Magu no Mi (Magma Magma),,1.5,Magma burns fire: Akainu's fruit is the superior one
+,Magu Magu no Mi (Magma Magma),Mera Mera no Mi (Fire Fire),,0.5,Fire cannot burn magma
+,Mera Mera no Mi (Fire Fire),Moku Moku no Mi (Smoke Smoke),,0.5,Fire and smoke cancel each other out (Ace vs Smoker in Alabasta)
+,Moku Moku no Mi (Smoke Smoke),Mera Mera no Mi (Fire Fire),,0.5,Fire and smoke cancel each other out (Ace vs Smoker in Alabasta)
+,Magu Magu no Mi (Magma Magma),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Hie Hie no Mi (Chilly Chilly),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Pika Pika no Mi (Light Light),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Goro Goro no Mi (Thunder Thunder),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Mera Mera no Mi (Fire Fire),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Mori Mori no Mi (Forest Forest),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Suna Suna no Mi (Sand Sand),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Gasu Gasu no Mi (Gas Gas),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Moku Moku no Mi (Smoke Smoke),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Susu Susu no Mi (Soot Soot),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Yuki Yuki no Mi (Snow Snow),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Numa Numa no Mi (Swamp Swamp),Yami Yami no Mi (Dark Dark),,1.5,Darkness cancels the fruit: a Logia body cannot turn intangible against it
+,Yami Yami no Mi (Dark Dark),,Devil fruits,1.25,Darkness draws every attack in: its user cannot dodge and feels more pain
+,Yami Yami no Mi (Dark Dark),,Weapons,1.25,Darkness draws every attack in: its user cannot dodge and feels more pain
+,Doru Doru no Mi (Wax Wax),Mera Mera no Mi (Fire Fire),,1.5,Wax melts under fire (Little Garden)
+,Doru Doru no Mi (Wax Wax),Magu Magu no Mi (Magma Magma),,1.5,Wax melts under heat
+,Doru Doru no Mi (Wax Wax),Doku Doku no Mi (Venom Venom),,0.5,Wax walls block Magellan's venom (Impel Down)
+,Bara Bara no Mi (Chop Chop),,Katanas,0.25,"A splitting body cannot be cut: slashes pass through, even Mihawk's"
+,Bara Bara no Mi (Chop Chop),,Western Swords,0.25,"A splitting body cannot be cut: slashes pass through, even Mihawk's"
+,Bara Bara no Mi (Chop Chop),,Cane Swords,0.25,"A splitting body cannot be cut: slashes pass through, even Mihawk's"
+,Kira Kira no Mi (Diamond Diamond),,Katanas,0.5,Diamond body: Jozu stopped Mihawk's slash
+,Kira Kira no Mi (Diamond Diamond),,Western Swords,0.5,Diamond body: Jozu stopped Mihawk's slash
+,Kira Kira no Mi (Diamond Diamond),,Cane Swords,0.5,Diamond body: Jozu stopped Mihawk's slash
+,Supa Supa no Mi (Dice Dice),,Katanas,0.5,Steel body: an ordinary sword stroke does not cut it
+,Supa Supa no Mi (Dice Dice),,Western Swords,0.5,Steel body: an ordinary sword stroke does not cut it
+,Supa Supa no Mi (Dice Dice),,Cane Swords,0.5,Steel body: an ordinary sword stroke does not cut it
+,Sube Sube no Mi (Slip Slip),,Blunt Weapons,0.75,Slippery skin: blows and blades slide off
+,Sube Sube no Mi (Slip Slip),,Katanas,0.75,Slippery skin: blows and blades slide off
+,Sube Sube no Mi (Slip Slip),,Western Swords,0.75,Slippery skin: blows and blades slide off
+,Sube Sube no Mi (Slip Slip),,Cane Swords,0.75,Slippery skin: blows and blades slide off
+Monkey D. Luffy,,Doku Doku no Mi (Venom Venom),,0.75,Built antibodies after surviving Magellan's venom
+Vinsmoke Reiju,,Doku Doku no Mi (Venom Venom),,0.5,"Poison Pink: immune to poison, she feeds on it"
+,Bisu Bisu no Mi (Biscuit Biscuit),Sorcery Clima Tact,,1.5,Nami's rain softens biscuit: how Cracker's armor fell
+Usopp,,Horo Horo no Mi,,0.5,Already negative: Perona's hollows have no effect on him
+Monkey D. Luffy,,Mero Mero no Mi (Love Love),,0.5,Feels no lust: Hancock's petrification does not work on him
+,Yomi Yomi no Mi (Revive Revive),Soru Soru no Mi (Soul Soul),,0.5,Soul power overrides Big Mom's homies
+Jimbei,,Soru Soru no Mi (Soul Soul),,0.75,Fearless: Big Mom could not take his lifespan
+,Jiki Jiki no Mi (Magnet Magnet),,Ranged Weapons,0.75,Repel sends bullets and cannonballs back
+,Tori Tori:Phoenix,,Weapons,0.5,Phoenix flames regenerate the body: most weapons leave no lasting wound (owner's rule)
+,Mori Mori no Mi (Forest Forest),Mera Mera no Mi (Fire Fire),,1.25,A forest burns: heat is what hurt Greenbull in Wano
+,Mori Mori no Mi (Forest Forest),Magu Magu no Mi (Magma Magma),,1.25,A forest burns: heat is what hurt Greenbull in Wano
+,Pero Pero no Mi (Lick Lick),Mera Mera no Mi (Fire Fire),,1.5,Candy melts under heat
+,Pero Pero no Mi (Lick Lick),Magu Magu no Mi (Magma Magma),,1.5,Candy melts under heat

@@ -367,7 +367,13 @@ class Ball(models.Model):
     credits = models.CharField(max_length=64, help_text="Author of the collection artwork")
     capacity_name = models.CharField(max_length=64, help_text="Name of the countryball's capacity")
     capacity_description = models.CharField(max_length=256, help_text="Description of the countryball's capacity")
-    capacity_logic = models.JSONField(help_text="Effect of this capacity", blank=True, default=dict)
+    capacity_logic = models.JSONField(
+        help_text="Holds this treasure's frames, not a capacity effect: the frames package keeps its alternate "
+        "artwork here, one entry per frame. Edit it in the Frames section rather than by hand. A battle "
+        "capacity is set on the treasure's Buff, in the battle package.",
+        blank=True,
+        default=dict,
+    )
     enabled = models.BooleanField(help_text="Enables spawning and show in completion", default=True)
     short_name = models.CharField(
         max_length=24,
