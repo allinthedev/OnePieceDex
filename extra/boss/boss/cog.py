@@ -10,7 +10,7 @@ from discord.ext import commands, tasks
 from django.db import models
 from django.utils import timezone
 
-from ballsdex.core.game_events import Event, bus
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.transformers import BallEnabledTransform, BallInstanceTransform, SpecialEnabledTransform
 from ballsdex.settings import settings
 from bd_models.models import BallInstance, Player, specials
@@ -513,13 +513,19 @@ class Boss(commands.GroupCog, name="boss"):
         not — a war scored on showing up should not quietly drop the players the boss killed.
         """
         fought = {entry[0] for entry in self.usersdamage} | set(self.users) | set(self.disqualified)
+        # what each of them actually hit the boss for, over the whole fight, so a quest can ask for
+        # damage rather than only for turning up
+        dealt: dict[int, int] = {}
+        for user_id, damage, *_ in self.usersdamage:
+            dealt[user_id] = dealt.get(user_id, 0) + int(damage or 0)
         for user_id in fought:
             player = await Player.objects.filter(discord_id=user_id).afirst()
             if player is None:
                 continue
-            await bus.dispatch(player, Event.BOSS_PLAYED, channel_id=channel_id)
+            context = EventContext(damage=dealt.get(user_id, 0))
+            await bus.dispatch(player, Event.BOSS_PLAYED, context=context, channel_id=channel_id)
             if bosswinner and user_id == bosswinner:
-                await bus.dispatch(player, Event.BOSS_WIN, channel_id=channel_id)
+                await bus.dispatch(player, Event.BOSS_WIN, context=context, channel_id=channel_id)
 
     async def _resolve_round(self, channel):
         """

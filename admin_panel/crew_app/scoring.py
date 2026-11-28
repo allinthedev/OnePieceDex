@@ -13,7 +13,7 @@ from django.core.cache import cache
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from ballsdex.core.game_events import Event, EventContext
+from ballsdex.core.game_events import Event, EventContext, bus
 
 from .models import CrewMembership, CrewWar, CrewWarEntry, CrewWarRule
 
@@ -180,7 +180,24 @@ async def score(player_id: int, source: str, *, context: EventContext | None = N
         points=rule.points,
     )
     log.debug("crew war: %s scored %s for %s", player_id, rule.points, source)
+    # said back to the bus so other systems can pay for bringing a crew points, not only for the deed itself.
+    # CREW_POINTS is not in EVENT_SOURCES, so this cannot come back round and score again.
+    await _announce(player_id, rule.points, rule.label)
     return rule.points
+
+
+async def _announce(player_id: int, points: int, deed: str):
+    """Tell the bus a crew was given points. A failure here never undoes the points themselves."""
+    if not points:
+        return
+    try:
+        await bus.dispatch(
+            player_id,
+            Event.CREW_POINTS,
+            context=EventContext(points=points, deed=deed[:64], amount=points),
+        )
+    except Exception:
+        log.exception("crew war: could not announce %s points for player %s", points, player_id)
 
 
 async def taken_today(war: CrewWar, player_id: int, rule: CrewWarRule) -> int:
@@ -220,6 +237,7 @@ async def award(
         note=note[:128],
     )
     log.info("crew war: %s given %s points by hand (%s)", player_id, points, note or "no reason")
+    await _announce(player_id, points, note or "given by hand")
     return entry
 
 

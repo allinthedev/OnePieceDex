@@ -223,9 +223,31 @@ async def ingest(body: dict) -> tuple[RoyaleMatch, bool]:
     return row, True
 
 
+def _whole(line: dict, field: str) -> int:
+    """
+    One of the report's plain counters, as a number this bot is willing to believe.
+
+    The report is written by another bot and is not trusted to send an integer: anything that is not
+    a whole number at or above zero reads as zero, which costs the player nothing they earned —
+    nothing here is scored, these only ever describe a deed already dispatched.
+    """
+    try:
+        value = int(line.get(field) or 0)
+    except (TypeError, ValueError):
+        return 0
+    return value if value >= 0 else 0
+
+
 async def _dispatch_player(player: Player, line: dict, guild_id, channel_id, events: dict) -> None:
     """Every deed one player's line carries, put on the bus, in this match's own events."""
-    context = EventContext(server_id=guild_id if isinstance(guild_id, int) else None)
+    # how the match went for them, carried by every one of its events so that a quest can ask for a
+    # podium or for a long survival without a second event per shape of goal
+    context = EventContext(
+        place=_whole(line, "place"),
+        rounds=_whole(line, "rounds_survived"),
+        damage=_whole(line, "damage_dealt"),
+        server_id=guild_id if isinstance(guild_id, int) else None,
+    )
     where = channel_id if isinstance(channel_id, int) else None
 
     await bus.dispatch(player, events["played"], context=context, channel_id=where)

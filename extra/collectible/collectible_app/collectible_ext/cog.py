@@ -5,6 +5,7 @@ from currency_app.models import BerryTransaction
 from discord import app_commands
 from discord.ext import commands
 
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.menus.old import FieldPageSource, Pages
 from ballsdex.core.utils.utils import inventory_privacy, is_staff
 from bd_models.models import BallInstance, Player
@@ -101,6 +102,14 @@ class Collectible(commands.GroupCog):
 
         await CollectibleInstance.objects.acreate(player=player, collectible=collectible)
         await interaction.followup.send(f"You've claimed **{collectible.name}!** Congratulations!")
+        await bus.dispatch(
+            player,
+            Event.COLLECTIBLE_BUY,
+            context=EventContext(
+                amount=-collectible.price, price=collectible.price, server_id=interaction.guild_id
+            ),
+            channel_id=interaction.channel_id,
+        )
         return
 
     @app_commands.command()

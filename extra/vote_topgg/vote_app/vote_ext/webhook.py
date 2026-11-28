@@ -8,6 +8,7 @@ import topgg
 from django.db.models import Q
 from django.utils import timezone
 
+from ballsdex.core.game_events import Event, EventContext, bus
 from bd_models.models import Ball, BallInstance, Player, Special
 from preview.utils import refresh_cache
 from settings.models import settings as bot_settings
@@ -92,6 +93,10 @@ async def grant_reward(bot: "BallsDexBot", vote_settings: VoteSettings, discord_
         log.warning("No ball available in the configured vote rarity range, no reward granted for %s", discord_id)
 
     await VoteRecord.objects.acreate(player=player, reward=reward)
+    # the vote counts whether or not a card could be drawn for it: the player did their bit either way
+    await bus.dispatch(
+        player, Event.VOTE, context=EventContext(instances=[reward] if reward is not None else [])
+    )
 
 
 async def start_webhook_server(bot: "BallsDexBot", vote_settings: VoteSettings) -> "topgg.Webhooks | None":

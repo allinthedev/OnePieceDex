@@ -17,6 +17,7 @@ from discord.utils import format_dt
 from django.db.models import Count, F, Sum
 from django.utils import timezone
 
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels, main_spawn_channel
 from ballsdex.core.utils.transformers import BallInstanceTransform
 from ballsdex.core.utils.utils import is_staff
@@ -264,8 +265,40 @@ class SleighCog(commands.GroupCog, name="Sleigh", group_name="sleigh"):
         embed = discord.Embed(title="Thank you", colour=settings.embed_colour, description="\n".join(lines))
         await interaction.followup.send(embed=embed)
 
+        # the card goes with the event, so a quest can ask for a gift worth having
+        await bus.dispatch(
+            player,
+            Event.SLEIGH_GIVE,
+            context=EventContext(
+                instances=[card], total=result.total, points=result.points, server_id=interaction.guild_id
+            ),
+            channel_id=interaction.channel_id,
+        )
+        if result.filled:
+            await self.thank_everyone(sleigh, interaction.channel_id)
+
         if result.filled and sleigh.announce_to != AnnouncementScope.NONE:
             await self.announce_full(sleigh, interaction.user)
+
+    async def thank_everyone(self, sleigh: Sleigh, channel_id: int | None):
+        """
+        Tell everybody who put something in that the sleigh is full.
+
+        This is the one collective goal in the bot: it is not about what a player did but about what the server
+        managed together, so it has to reach every contributor and not only whoever dropped the last card in.
+        Dispatched once in the life of a sleigh, and never waited on — a quest failing here must not spoil a gift.
+        """
+        try:
+            givers = [
+                giver
+                async for giver in SleighCard.objects.filter(sleigh=sleigh, given_by__isnull=False)
+                .values_list("given_by_id", flat=True)
+                .distinct()
+            ]
+            for giver in givers:
+                await bus.dispatch(giver, Event.SLEIGH_FULL, context=EventContext(total=sleigh.goal))
+        except Exception:
+            log.exception("sleigh: could not tell the givers it is full")
 
     async def announce_full(self, sleigh: Sleigh, user: discord.User | discord.Member):
         """Say the sleigh is full. A failure here never spoils the gift that filled it."""

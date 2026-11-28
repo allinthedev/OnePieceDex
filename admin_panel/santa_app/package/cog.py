@@ -18,6 +18,7 @@ from discord.utils import format_dt
 from django.utils import timezone
 from eventpass_app import wallet
 
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels
 from ballsdex.core.utils.transformers import BallEnabledTransform, BallInstanceTransform
 from ballsdex.core.utils.utils import is_staff
@@ -26,7 +27,7 @@ from bd_models.models import Player
 from settings.models import settings
 
 from ..exchange import Refused, adraw, afill_the_rest, ajoin, aopen, aset_wish, awrap_card, awrap_paid
-from ..models import SantaEntry, SantaGift, SecretSanta
+from ..models import SantaEntry, SantaGift, SantaWish, SecretSanta
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot
@@ -127,6 +128,12 @@ class SantaCog(commands.GroupCog, name="Secret Santa", group_name="santa"):
             f"{santa.wishlist_size} slots, and whoever draws you picks one of them. Sign-ups close "
             f"{format_dt(santa.signup_closes_at, style='R')}."
         )
+        await bus.dispatch(
+            player,
+            Event.SANTA_JOIN,
+            context=EventContext(server_id=interaction.guild_id),
+            channel_id=interaction.channel_id,
+        )
 
     @app_commands.command()
     @app_commands.describe(slot="Which slot on your list.", treasure="What you would like.")
@@ -146,11 +153,19 @@ class SantaCog(commands.GroupCog, name="Secret Santa", group_name="santa"):
             return
         player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
         try:
-            await aset_wish(santa.pk, player.pk, treasure.pk, slot)
+            wish = await aset_wish(santa.pk, player.pk, treasure.pk, slot)
         except Refused as error:
             await interaction.followup.send(str(error))
             return
         await interaction.followup.send(f"Slot {slot} of your list is **{treasure.country}**.")
+        # the event carries how much of the list is written, so a quest can ask for a list filled to the last slot
+        filled = await SantaWish.objects.filter(entry_id=wish.entry_id).acount()
+        await bus.dispatch(
+            player,
+            Event.SANTA_WISH,
+            context=EventContext(total=filled, server_id=interaction.guild_id),
+            channel_id=interaction.channel_id,
+        )
 
     @app_commands.command()
     async def wishlist(self, interaction: discord.Interaction["BallsDexBot"]):
@@ -260,6 +275,13 @@ class SantaCog(commands.GroupCog, name="Secret Santa", group_name="santa"):
             f"**{gift.cached_ball.country}** is wrapped and on its way. They open it "
             f"{format_dt(santa.opens_at, style='R')}, and they will never know it was you."
         )
+        # the card goes with the event, so a quest can ask for a parcel worth opening
+        await bus.dispatch(
+            player,
+            Event.SANTA_GIFT,
+            context=EventContext(instances=[card], server_id=interaction.guild_id),
+            channel_id=interaction.channel_id,
+        )
 
     @app_commands.command()
     @app_commands.describe(treasure="Which of their wishes to have made.")
@@ -281,6 +303,14 @@ class SantaCog(commands.GroupCog, name="Secret Santa", group_name="santa"):
         await interaction.followup.send(
             f"Paid. **{gift.cached_ball.country}** is wrapped and on its way, and they open it "
             f"{format_dt(santa.opens_at, style='R')}."
+        )
+        # a parcel paid for holds no card yet, only a promise of one: the event carries the price instead, and a
+        # quest asking for a treasure of a given rarity is not satisfied by paying
+        await bus.dispatch(
+            player,
+            Event.SANTA_GIFT,
+            context=EventContext(tokens=santa.price, server_id=interaction.guild_id),
+            channel_id=interaction.channel_id,
         )
 
     @app_commands.command()
@@ -310,6 +340,12 @@ class SantaCog(commands.GroupCog, name="Secret Santa", group_name="santa"):
         )
         embed.set_footer(text="Somebody picked it off your list. You will never know who.")
         await interaction.followup.send(embed=embed)
+        await bus.dispatch(
+            player,
+            Event.SANTA_OPEN,
+            context=EventContext(instances=[opened.instance], server_id=interaction.guild_id),
+            channel_id=interaction.channel_id,
+        )
 
     # ── staff ───────────────────────────────────────────────────────────────────────────────────
 

@@ -765,6 +765,17 @@ class AuctionHouse(commands.GroupCog, name="Buggy's Auction House", group_name="
             won_context = EventContext(instances=[instance], price=offer.amount, server_id=listing.server_id)
             winner_id = offer.buyer_id
             transaction.on_commit(lambda: bus.dispatch_soon(winner_id, Event.AUCTION_WON, context=won_context))
+            # the other side of the same sale: listing a treasure is free, selling one is not, so the seller
+            # gets an event of their own rather than sharing the buyer's
+            sold_context = EventContext(
+                instances=[instance],
+                price=offer.amount,
+                amount=offer.amount,
+                partner_discord_id=offer.buyer.discord_id,
+                server_id=listing.server_id,
+            )
+            seller_id = listing.seller_id
+            transaction.on_commit(lambda: bus.dispatch_soon(seller_id, Event.AUCTION_SOLD, context=sold_context))
 
             others = AuctionOffer.objects.filter(listing=listing, status=AuctionOffer.Status.PENDING).exclude(
                 pk=offer.pk

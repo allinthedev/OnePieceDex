@@ -15,6 +15,7 @@ from discord.ext import commands
 from discord.utils import format_dt
 from django.utils import timezone
 
+from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.broadcast import announce_to_spawn_channels
 from bd_models.enums import AnnouncementScope
 from bd_models.models import Player
@@ -195,6 +196,26 @@ class AdventCog(commands.GroupCog, name="Advent", group_name="advent"):
             )
         embed.add_field(name="So far", value=f"{result.opened_total}/{calendar.door_count} doors", inline=False)
         await interaction.followup.send(embed=embed)
+
+        # a door bought open later carries what it cost, so a quest can ask for doors opened on the day
+        await bus.dispatch(
+            player,
+            Event.ADVENT_OPEN,
+            context=EventContext(
+                day=result.day,
+                total=result.opened_total,
+                amount=-result.paid,
+                server_id=interaction.guild_id,
+            ),
+            channel_id=interaction.channel_id,
+        )
+        if result.opened_total >= calendar.door_count:
+            await bus.dispatch(
+                player,
+                Event.ADVENT_COMPLETE,
+                context=EventContext(total=result.opened_total, server_id=interaction.guild_id),
+                channel_id=interaction.channel_id,
+            )
 
         if result.surprise is not None and calendar.announce_to != AnnouncementScope.NONE:
             await self.shout(interaction, calendar, result)
