@@ -1,10 +1,7 @@
 import logging
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from django.utils import timezone
-
-from ..models import BattleSession, BattleSessionStatus
+from . import sessions
 from .cog import Battle
 
 if TYPE_CHECKING:
@@ -12,31 +9,41 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("ballsdex.packages.battle")
 
-STALE_SESSION_CUTOFF_MINUTES = 30
+
+async def _refund_orphaned_sessions() -> list[int]:
+    """
+    What a restart leaves behind: every battle still open, started or not.
+
+    The buttons of a battle live in the process that posted them. Once that process is gone nothing will
+    ever play those battles again, however recent they are, and their players would be told they are
+    "already in another battle" until somebody closed them by hand. So they are all called off, and a
+    wager already taken goes back to both players.
+    """
+    closed = await sessions.acancel_all(stale_only=False)
+    if closed:
+        log.info("Called off %s battle(s) left open by the last run: %s", len(closed), closed)
+    return closed
 
 
-async def _refund_stale_sessions():
+async def _refund_stale_sessions() -> list[int]:
     """
-    A battle escrows its wager once both players are ready. If the bot restarts mid-battle,
-    nothing else will ever resolve that session — refund the stake and close it out instead of
-    silently stranding the berries.
+    What a reload of the package may close: only the battles nobody has touched for half an hour.
+
+    A reload keeps the process, and with it the boards and their buttons: a battle being played goes on
+    being played, and calling it off under its players would be the bug.
     """
-    cutoff = timezone.now() - timedelta(minutes=STALE_SESSION_CUTOFF_MINUTES)
-    stale = [
-        s
-        async for s in BattleSession.objects.select_related("player1", "player2").filter(
-            status__in=(BattleSessionStatus.PROPOSED, BattleSessionStatus.ACTIVE), updated_at__lt=cutoff
-        )
-    ]
-    for session in stale:
-        if session.status == BattleSessionStatus.ACTIVE and session.wager_amount:
-            await session.player1.add_money(session.wager_amount)
-            await session.player2.add_money(session.wager_amount)
-            log.info("Refunded stale battle session #%s (%s berries each)", session.pk, session.wager_amount)
-        session.status = BattleSessionStatus.CANCELLED
-        await session.asave(update_fields=("status",))
+    closed = await sessions.acancel_all(stale_only=True)
+    if closed:
+        log.info("Called off %s abandoned battle(s): %s", len(closed), closed)
+    return closed
 
 
 async def setup(bot: "BallsDexBot"):
-    await _refund_stale_sessions()
-    await bot.add_cog(Battle(bot))
+    cog = Battle(bot)
+    # the package is loaded before the bot has connected at startup, and long after on a reload
+    if bot.is_ready():
+        await _refund_stale_sessions()
+        await cog.resume_timers()
+    else:
+        await _refund_orphaned_sessions()
+    await bot.add_cog(cog)
