@@ -39,7 +39,6 @@ from django.db.models import Q  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
 from ballsdex.core.game_events import bus  # noqa: E402
-from ballsdex.core.utils.transformers import BallInstanceTransformer  # noqa: E402
 from bd_models import models as bd  # noqa: E402
 from bd_models.models import Ball, BallGroup, BallInstance, Player, Special  # noqa: E402
 
@@ -638,11 +637,16 @@ class World:
         self.events: list[tuple] = []
         self.errors: list[Exception] = []
         self.overrides: dict = {}
+        # What every test gets unless it says otherwise. The health multiplier is a tuning knob of the panel
+        # (2 in the database): held at 1 here, so that the figures of the rules tests are the cards' own and
+        # do not move each time the knob is turned. t09 is the file that turns it.
+        self.defaults: dict = {"health_multiplier": 1.0}
         # seconds every call to Discord takes. 0 by default; the tests about clicks landing together set it
         # to what a real round trip costs, since that is the window those clicks land in
         self.latency = 0.0
         self.token_generation = 0
         bus.subscribe("battle_tests", self._on_event)
+        self._patch_settings()
 
     def expire_tokens(self):
         """Fifteen minutes go by: every interaction made so far can no longer be followed up or edited."""
@@ -698,15 +702,25 @@ class World:
         """Move a card to player `n`, as a trade or a gift would."""
         await BallInstance.objects.filter(pk=instance_id).aupdate(player=await self.player(n))
 
-    async def arg(self, n: int, instance_id: int) -> BallInstance:
+    @staticmethod
+    def parameter(command: str, name: str):
+        """A parameter of a slash command of the cog, with the transformer the cog gave it."""
+        return getattr(cog.Battle, command)._params[name]
+
+    async def arg(self, n: int, instance_id: int, command: str = "add", name: str = "countryball") -> BallInstance:
         """
-        What Discord hands the command for a treasure argument: the row as `BallInstanceTransformer` reads
-        it, refused when it is not the caller's.
+        What Discord hands the command for a treasure argument: the row as that parameter's own transformer
+        reads it, refused by that transformer (`commands.BadArgument`) when it is not the caller's.
         """
-        instance = await BallInstanceTransformer().get_from_pk(instance_id)
-        if instance.player.discord_id != self.user(n).id:
-            raise commands.BadArgument("That treasure doesn't belong to you.")
+        transformer = self.parameter(command, name)._annotation
+        instance = await transformer.get_from_pk(instance_id)
+        await transformer.validate(SimpleNamespace(author=self.user(n)), instance)
         return instance
+
+    async def options(self, n: int, command: str, name: str, typed: str = "") -> list[tuple[str, str]]:
+        """What Discord lists under a treasure argument while player `n` types: (label, value) pairs."""
+        choices = await self.parameter(command, name).autocomplete(FakeInteraction(self, self.user(n)), typed)
+        return [(choice.name, choice.value) for choice in choices]
 
     # -- settings and the life of the cog --
 
@@ -720,11 +734,11 @@ class World:
         self._patch_settings()
 
     def _patch_settings(self):
-        overrides = self.overrides
+        world = self
 
         async def patched(refresh: bool = True):
             battle_settings = await models.BattleSettings.aload()
-            for name, value in overrides.items():
+            for name, value in {**world.defaults, **world.overrides}.items():
                 if not hasattr(battle_settings, name):
                     raise AttributeError(name)
                 setattr(battle_settings, name, value)
@@ -771,7 +785,7 @@ class World:
 
     async def cmd_card(self, n: int, name: str, **instance_ids) -> FakeInteraction:
         """A command whose arguments are all treasures, given by id."""
-        arguments = {key: await self.arg(n, value) for key, value in instance_ids.items()}
+        arguments = {key: await self.arg(n, value, name, key) for key, value in instance_ids.items()}
         return await self.cmd(n, name, **arguments)
 
     async def click(self, n: int, view, button, message=None, force: bool = False) -> FakeInteraction:

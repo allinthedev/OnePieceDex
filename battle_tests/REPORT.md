@@ -1,26 +1,27 @@
 # Mode combat : rapport de test
 
-Deuxième passe, le 28 novembre 2026, sur `extra/battle/battle_app` après correction des 24 bugs de la première
-(`sessions.py` branché, plus les deux retouches qui ont suivi, voir section 4). Toujours sans Discord : le vrai cog, piloté par de fausses
-interactions, sur la base `battle_test`. Aucun fichier modifié hors de `battle_tests/`.
+Troisième passe, le 28 novembre 2026, sur `extra/battle/battle_app` : les 24 bugs de la première passe sont
+corrigés, et deux nouveautés sont couvertes, le multiplicateur de vie et les listes d'autocomplétion. Toujours
+sans Discord : le vrai cog, piloté par de fausses interactions, sur la base `battle_test`. Aucun fichier
+modifié hors de `battle_tests/`.
 
 ## 1. Bilan
 
 | | |
 |---|---|
-| Tests | **513** |
-| Passent | **513** |
+| Tests | **579** |
+| Passent | **579** |
 | Échouent | **0** |
-| Bugs de la première passe | 24, **tous corrigés et vérifiés** (un test de non-régression chacun, voir section 3) |
-| Nouveau bug trouvé dans le code corrigé | aucun |
+| Bugs de la première passe | 24, **tous corrigés et vérifiés** (un test de non-régression chacun, section 3) |
+| Nouveau bug bloquant | aucun ; un défaut mineur de recherche hérité du reste du bot (section 4) |
 
-Rejouer tout (3 min 30) :
+Rejouer tout (4 min 10) :
 
 ```
 bash battle_tests/run_all.sh
 ```
 
-Rejouer une partie : `bash battle_tests/run_all.sh t04 t07`. La sortie complète de chaque fichier reste dans
+Rejouer une partie : `bash battle_tests/run_all.sh t09 t10`. La sortie complète de chaque fichier reste dans
 `battle_tests/out/<fichier>.txt`. Les tests écrits pour un bug gardent son étiquette : si le bug revient, la
 ligne `FAIL` la porte, par exemple `[B06]`.
 
@@ -35,66 +36,91 @@ ligne `FAIL` la porte, par exemple `[B06]`.
 | `t05_multipliers.py` | 56 | paliers, paires, liens de groupe, résistances |
 | `t06_end.py` | 65 | paiement, gains, `BattleRecord`, événements, forfait, horloge, classement |
 | `t07_robustness.py` | 65 | redémarrage, rechargement, clics simultanés, menus, messages supprimés, jeton de 15 minutes |
-| `t08_balance.py` | 5 | simulation d'équilibrage |
+| `t08_balance.py` | 5 | simulation d'équilibrage, aux réglages de la base |
+| `t09_health.py` | 33 | multiplicateur de vie |
+| `t10_arguments.py` | 33 | listes d'autocomplétion des cinq arguments |
 
 ### Style
 
 `ruff check battle_tests` et `ruff format --check battle_tests` passent tous les deux (ruff 0.14.1, la version
 du projet, installé sur ce PC seulement, à la demande de l'utilisateur ; rien n'a été ajouté à l'image).
 
-### Le barème de rareté a changé entre les deux passes
+### Les réglages ont bougé pendant les tests
 
-À la demande de l'utilisateur, l'écart de dégâts lié à la rareté passe de 30 % à 10 % au plus : 0.9 / 0.925 /
-0.95 / 0.975 / 1.0, au lieu de 0.7 à 1.0. Les bornes des paliers et le bonus de critique à 0 ne bougent pas.
-Tous les chiffres de ce rapport, équilibrage compris, sont ceux du nouveau barème ; `t05` vérifie les cinq
-valeurs en base et que rien ne descend sous 0.9.
+Deux réglages ont changé à la demande de l'utilisateur, et un troisième en cours de passe :
+
+- **Barème de rareté** : 0.9 / 0.925 / 0.95 / 0.975 / 1.0, soit 10 % d'écart au plus, au lieu de 0.7 à 1.0.
+- **Multiplicateur de vie** : nouveau réglage, d'abord à 2 puis fixé à **3** par l'utilisateur (modèle,
+  migration `0008` et base).
+
+Pour ne plus dépendre de la valeur du jour, tous les tests de règles tiennent le multiplicateur de vie à 1
+(leurs chiffres sont ceux des cartes), `t09` le règle lui-même à 2, à 3 et à 1,5, et seule la simulation
+(`t08`) joue avec ce que la base contient.
 
 ## 2. Ce qui est couvert
 
 **Proposition.** Refus contre soi-même et contre un bot, mise impayable, taille de deck négative ou au-delà de
 10. Joueur déjà engagé refusé des deux côtés. Un joueur seulement invité peut lancer son propre combat, ce qui
-ferme l'invitation (message barré, boutons arrêtés) ; dès qu'il a ajouté une carte, il est engagé. Un plan
-intouché depuis 31 minutes ne bloque plus un nouveau combat et se ferme avec un mot sur son message.
-`/battle leave` : annule un plan, abandonne un combat, répond « You aren't in a battle right now. » sinon.
+ferme l'invitation ; dès qu'il a ajouté une carte, il est engagé. Un plan intouché depuis 31 minutes ne bloque
+plus un nouveau combat. `/battle leave` : annule un plan, abandonne un combat.
 
-**Deck.** Seuls les personnages actifs entrent, messages vérifiés mot pour mot (arme, fruit, bateau, trésor sans
-rôle, `Vinsmoke Sora` désactivé). Deck plein, même exemplaire deux fois, carte d'un autre, modification après
-« prêt ». Une carte donnée, un objet donné ou une carte supprimée après `/battle add` sont retirés au Ready,
-chez soi comme chez l'adversaire, et le porteur d'un objet perdu retrouve ses stats.
+**Deck.** Seuls les personnages actifs entrent, messages vérifiés mot pour mot. Deck plein, même exemplaire
+deux fois, carte d'un autre, modification après « prêt ». Une carte donnée, un objet donné ou une carte
+supprimée après `/battle add` sont retirés au Ready, chez soi comme chez l'adversaire.
 
 **Équipement (53).** Emplacements, remplacement, objet déjà porté, objet désactivé, gel après « prêt ».
-Pourcentages demandés (Luffy + Gomu Gomu 200, + Wado Ichimonji 30 ; Zoro + Wado 200, + Yoru 130 ; Kaido +
-Hassaikai 200 ; Sanji + une arme 25) et 1 684 paires comparées à une relecture indépendante de la table. Stats
-avant, pendant et après, bonus de set compris.
+Pourcentages demandés et 1 684 paires comparées à une relecture indépendante de la table. Stats avant, pendant
+et après, bonus de set compris.
 
-**Démarrage.** Séquestre une fois chez chacun, inscrit `battle_wager_hold`. Mise impayable par l'un ou par
-l'autre : personne n'est débité, les deux redeviennent non prêts, le ✅ disparaît. Deck vide refusé au Ready.
-Deux Ready simultanés, Ready recliqué pendant celui de l'autre (latence simulée de 100 ms), Ready et
+**Démarrage.** Séquestre une fois chez chacun. Mise impayable par l'un ou par l'autre : personne n'est débité.
+Deck vide refusé au Ready. Deux Ready simultanés, Ready recliqué pendant celui de l'autre, Ready et
 `/battle add` au même moment : un seul combat, un seul tableau, un seul prélèvement.
 
-**Tours.** Attaque aux deux bouts de la fourchette, critique réussi et raté, esquive, soin borné et compté par
-carte, boutons Heal et Capacity grisés une fois épuisés, attaque de repli réelle pour un clic déjà parti.
-Capacity par défaut et les trois effets de `Buff`, esquive d'une Capacity offensive, jamais d'une Capacity de
-soin. Les trois objets de boutique ; un objet de soin refusé sans être consommé quand la carte n'a plus de soin.
+**Tours.** Attaque aux deux bouts de la fourchette, critique, esquive, soin borné et compté par carte, boutons
+grisés une fois épuisés, attaque de repli réelle. Capacity par défaut et les trois effets de `Buff`, esquive
+d'une Capacity offensive. Les trois objets de boutique.
 
-**Multiplicateurs (56).** Cinq paliers et leurs bornes, Akainu → Ace 1.3 à sens unique, Straw Hats 0.75, paire
-avant lien de groupe, miroir neutre, Boa → Luffy 0.1. Les 12 paires et les 1 018 paires couvertes par un lien.
-Gomu Gomu contre Goro Goro + Hassaikai tenu à 0.25, phénix contre une arme 0.5, plafond. « (lore advantage!) »
-seulement quand c'est la relation qui avantage, plus quand seul l'équipement joue.
+**Multiplicateurs (56).** Cinq paliers et leurs bornes, paires, liens de groupe, miroir neutre, résistances et
+leur plancher, « (lore advantage!) » seulement quand la relation avantage.
 
-**Fin.** Pot et récompense payés une fois sous `battle_payout`, un seul `BattleRecord`, événements avec le bon
-`lost_count`. Anti-abus inchangé et revérifié. Forfait permis aux deux joueurs à tout moment, `lost_count` d'au
-moins 1 pour les deux et pour les deux événements. Horloge du cog : un tour non joué part en attaque, le combat
-laissé seul se termine et se règle. Classement : ordre, V–D, page 2 propre, retour en page 1 sans doublon.
+**Fin.** Pot et récompense payés une fois, un seul `BattleRecord`, événements avec le bon `lost_count`.
+Anti-abus. Forfait permis aux deux joueurs. Horloge du cog. Classement paginé sans doublon.
 
-**Robustesse.** État JSON relu à l'identique, carte d'avant l'équipement relue et jouée. `setup()` réel dans
-ses deux cas : au démarrage du processus tout ce qui est ouvert est fermé et remboursé (`battle_wager_refund`) ;
-au rechargement du package un long combat en cours continue, son horloge repart sur le nouveau cog et un clic
-sur l'ancien tableau joue le tour. Deux actions sur un tour, coup fatal en double, clic au moment où l'horloge
-tombe : une seule action. Menu d'objets utilisé hors de son tour : refusé, objet gardé. Tableau supprimé : le
-combat continue sur un nouveau message, par clic comme par l'horloge ; sans aucun endroit où poster, il est
-annulé et remboursé. Quinze minutes après le début (jeton d'interaction expiré), l'horloge édite toujours le
-tableau en place.
+**Robustesse.** État JSON relu à l'identique. `setup()` réel au démarrage et au rechargement. Deux actions sur
+un tour, coup fatal en double, clic au moment où l'horloge tombe : une seule action. Tableau supprimé : le
+combat continue ailleurs. Jeton d'interaction expiré : l'horloge édite toujours le tableau en place.
+
+**Multiplicateur de vie (33, nouveau).**
+
+- Le cog lit bien la valeur de la base, qui est celle par défaut du modèle. Le panneau accepte 0,5 à 10 et
+  refuse 0,4 et 10,5 ; la contrainte de la base refuse les mêmes (essais faits dans une transaction annulée).
+- À ×2, Luffy (310/301) entre à 310/602 : la vie double, l'attaque ne bouge pas. Le bonus de la carte, le bonus
+  de spécial et la vie fixe d'un `Buff` sont dans ce qui est multiplié. Une fraction est arrondie (390 × 1,5 =
+  585).
+- Objets : Enma à 200 % sur Zoro donne « +490 ATK, +812 HP » à ×2 (Zoro à 786/1288) et « +490 ATK,
+  +1218 HP » à ×3 (Zoro à 786/1932). Luffy avec Gomu Gomu et
+  Wado : 1803 d'attaque et 3146 de vie, le bonus de set pris sur le total multiplié. Retrait d'un objet, puis
+  objet donné à un autre joueur : les stats se recalculent, toujours doublées.
+- Le réglage est lu à l'entrée dans le deck : une carte entrée à ×2 garde ses 602 quand le réglage passe à 3,
+  la suivante entre à ×3, et un combat lancé garde sa vie quoi qu'on règle ensuite.
+- En combat, un coup vaut ce qu'il valait (294), un soin est une part de la vie multipliée (25 % de 780 = 195).
+- Luffy contre Kaido, meilleur tirage à chaque coup : **2 tours à ×1, 4 à ×2, 6 à ×3**.
+- Gains : le rapport de puissance compte la vie multipliée. La victoire contre un deck plus lourd paie 37 à ×2
+  contre 36 à ×1, le plancher reste 15.
+
+**Listes d'autocomplétion (33, nouveau).** Chaque liste est demandée comme Discord la demande, par
+l'`autocomplete` du paramètre de la commande.
+
+- Les cinq arguments ont chacun leur liste, et aucun ne change la lecture ni le contrôle de ce qui est choisi.
+- `/battle add` : les personnages du joueur, les plus rares d'abord, le meilleur exemplaire d'abord ; ni arme,
+  ni fruit, ni bateau, ni personnage retiré, ni carte d'un autre, ni carte supprimée. Recherche par morceau de
+  nom, par identifiant, par `=Nom` exact. Trente candidats : 25 choix.
+- `/battle equip item` : armes et fruits seulement, objet retiré exclu.
+- `/battle equip character` et `/battle remove` : le deck en préparation, libellé « Roronoa Zoro — 786 ATK /
+  1288 HP — holds Enma ». `/battle unequip` : « Enma — held by Roronoa Zoro (200%) ».
+- Rien sans combat en préparation, rien pendant un combat lancé, rien du deck adverse. Recherche par nom, par
+  objet porté, par identifiant en majuscules ou minuscules. Un libellé de plus de 100 caractères est coupé à
+  100 et reste trouvable par ce que la coupe a enlevé.
 
 ## 3. Les 24 bugs de la première passe : corrigés
 
@@ -125,29 +151,44 @@ tableau en place.
 | **B23** | vue de proposition jamais libérée | `t06` « nothing of the battle is left listening… » |
 | **B24** | mouvements de berries inscrits « unknown » | `t03`, `t04`, `t06`, `t07` (les quatre motifs) |
 
-## 4. Remarques sur le code corrigé (aucun test en échec)
+## 4. Remarques (aucun test en échec)
 
-Deux remarques de cette passe ont été reprises aussitôt par la session principale, et sont maintenant testées :
-les boutons de tour d'avant un rechargement sont arrêtés une fois le tour joué (`t07`, « ONE set of turn
-buttons is listening afterwards »), et le panneau refuse une durée de tour sous 10 secondes (`t06`, « the panel
-takes a turn length of 10 seconds and nothing under »). Restent :
+Deux remarques de la deuxième passe ont été reprises par la session principale et sont testées : les boutons
+de tour d'avant un rechargement sont arrêtés une fois le tour joué, et le panneau refuse une durée de tour sous
+10 secondes.
 
-- **Un joueur invité reste « occupé » pour les tiers** tant que l'invitation tient, au plus 30 minutes. Lui peut
-  s'en libérer (`/battle start` ou `/battle leave`), un tiers ne peut pas l'inviter entre-temps.
-- **Un forfait avant le premier tour paie toujours la récompense entière** (50), une fois par adversaire et par
-  jour.
-- **Une victoire non payée consomme toujours une des trois victoires garanties** : dans le scénario, deux ont
-  payé 50, pas trois.
-- **Le spécial d'un objet ne compte pas** : une arme Shiny donne autant qu'une arme simple.
-- Le dump ne contient toujours ni `Buff` ni `BattleItem` : la boutique répond « empty ».
+Nouveau dans cette passe :
+
+- **Un nom à point ne se trouve pas en le tapant en entier.** Dans `/battle add` et dans l'objet de
+  `/battle equip`, taper « Monkey D. Luffy » ne trouve rien ; « luffy » trouve la carte. La recherche retire
+  les points de ce qui est tapé mais pas des noms (`battle_ext/arguments.py`, `value.replace(".", "")`). C'est
+  la recherche du reste du bot, reprise telle quelle, donc le défaut existe partout ; ici il touche **27
+  personnages actifs**, dont Luffy, Ace, Barbe Noire et Roger. Les listes lues dans le deck, elles, trouvent
+  « Monkey D. Luffy » tapé en entier.
+- **Un `flat_damage` de `Buff` ne suit pas le multiplicateur de vie** : c'est un montant fixe. À ×3 il pèse
+  trois fois moins face à la vie adverse, alors qu'un `heal_percent` suit puisqu'il est en pourcentage.
+- **Le rapport de puissance des gains change un peu** avec le multiplicateur (36 → 37 dans le scénario), la
+  vie comptant double ou triple dans attaque + vie.
+- **Le spécial d'une carte pèse davantage côté vie** : un Shiny ajoute 1000 d'attaque et 1000 × le
+  multiplicateur de vie.
+
+Toujours vrai :
+
+- Un joueur invité reste « occupé » pour les tiers tant que l'invitation tient, au plus 30 minutes.
+- Un forfait avant le premier tour paie la récompense entière (50), une fois par adversaire et par jour.
+- Une victoire non payée consomme une des trois victoires garanties.
+- Le spécial d'un objet ne compte pas.
+- Le dump ne contient ni `Buff` ni `BattleItem` : la boutique répond « empty ».
 
 ## 5. Équilibrage
 
 Simulateur : `engine.resolve_action` avec les multiplicateurs du cog, sur des cartes construites par
 `serialize_ball`, `equip_percent`, `serialize_item` et `apply_equipment`. Vérifié contre le vrai cog : mêmes
 decks, même graine, même politique → même gagnant au même tour, 12 combats sur 12. Chaque chiffre porte sur
-1 000 combats, les deux decks ouvrant à tour de rôle sauf mention contraire. Chiffres refaits avec le barème de
-rareté de 0.9 à 1.0 et la Capacity esquivable.
+1 000 combats, les deux decks ouvrant à tour de rôle sauf mention contraire.
+
+Réglages : ceux de la base au dernier passage, donc **vie ×3**, barème de rareté de 0.9 à 1.0, Capacity
+esquivable.
 
 Decks types, choisis par règle : dans un palier, les quatre personnages actifs dotés d'un fruit canonique les
 plus proches de la médiane du palier. Politique : attaque sûre si elle suffit à tuer, sinon Capacity, sinon Crit
@@ -155,85 +196,95 @@ Gamble.
 
 | Palier | Deck | Puissance nue | Avec leurs fruits |
 |---|---|---|---|
-| T1-15 | Loki, Kuzan, Barbe Noire, Kizaru | 2 592 | 11 730 |
-| T16-35 | Ace, Kuma, Saturn, Sengoku | 1 438 | 7 008 |
-| T36-85 | Morley, Perona, Jabra, Ivankov | 720 | 2 754 |
-| T86-140 | Caribou, Shinobu, Caesar Clown, Hina | 562 | 2 802 |
-| T141-180 | Streusen, Tamago, Pekoms, Machvise | 487 | 1 537 |
-| T181+ | Babe, Tama, Miss Merry Christmas, Alvida | 335 | 1 205 |
+| T1-15 | Loki, Kuzan, Barbe Noire, Kizaru | 5 188 | 22 805 |
+| T16-35 | Ace, Kuma, Saturn, Sengoku | 2 898 | 13 984 |
+| T36-85 | Morley, Perona, Jabra, Ivankov | 1 462 | 5 472 |
+| T86-140 | Caribou, Shinobu, Caesar Clown, Hina | 1 132 | 5 584 |
+| T141-180 | Streusen, Tamago, Pekoms, Machvise | 973 | 3 163 |
+| T181+ | Babe, Tama, Miss Merry Christmas, Alvida | 669 | 2 443 |
 
-(Puissance = attaque + vie de tout le deck.)
+(Puissance = attaque + vie de tout le deck, vie multipliée par 3.)
 
-**La rareté seule.** Sans équipement, un deck bat le palier du dessous 99,9 % du temps en haut de l'échelle
-(T1-15 contre T16-35, T16-35 contre T36-85). Plus bas l'écart se resserre : T36-85 bat T86-140 à 94,7 %, T86-140
-bat T141-180 à 81,9 %. Le nouveau barème n'y change presque rien en haut : la médiane des stats passe de 325 à
-178 entre les deux premiers paliers, et 10 % de dégâts ne pèsent pas face à cela.
+**Ce que le multiplicateur de vie change.** Mêmes decks contre eux-mêmes :
+
+| | Durée, T1-15 nu | Celui qui ouvre gagne | Durée, T1-15 équipé | Celui qui ouvre gagne | Se soigner sous 35 % |
+|---|---|---|---|---|---|
+| ×1 | 10,5 tours | 60,4 % | 8,8 tours | 78,4 % | 38,5 % de victoires |
+| ×2 | 21,3 tours | 56,9 % | 16,6 tours | 59,2 % | 39,5 % |
+| ×3 | 29,8 tours | 55,3 % | 22,4 tours | 58,6 % | 54,9 % |
+
+Le réglage fait ce qu'on lui demande : à ×3 un combat à quatre cartes dure trois fois plus longtemps, l'avantage
+de celui qui ouvre retombe de 78 % à 59 % entre decks équipés, et se soigner cesse d'être une erreur. Il ne
+change rien au rapport de force entre decks : T36-85 dans ses fruits contre T1-15 nu reste à 56-57 % aux trois
+valeurs.
+
+**La rareté seule.** Sans équipement, un deck bat le palier du dessous à 100 % jusqu'à T36-85, puis à 98,8 %,
+91,1 % et 99,9 %. Des combats plus longs laissent moins de place à la chance.
 
 **L'équipement rattrape-t-il un deck rare ? Seulement s'il est nu.**
 
 | Deck modeste | Deck rare | Victoires du modeste | Puissances |
 |---|---|---|---|
-| T36-85, ses fruits | T16-35 nu | 99,7 % | 2 754 / 1 438 |
-| T36-85, ses fruits | T1-15 nu | 56,6 % | 2 754 / 2 592 |
-| T36-85, ses fruits + une arme | T1-15 nu | 84,5 % | 3 373 / 2 592 |
-| T36-85, objets quelconques | T16-35 nu | 77,3 % | 1 665 / 1 438 |
-| T36-85, objets quelconques | T1-15 nu | 1,6 % | 1 665 / 2 592 |
-| T141-180, ses fruits | T36-85 nu | 100,0 % | 1 537 / 720 |
-| T141-180, ses fruits | T16-35 nu | 60,1 % | 1 537 / 1 438 |
-| T141-180, ses fruits | T1-15 nu | 0,6 % | 1 537 / 2 592 |
-| T36-85, ses fruits | T1-15, objets quelconques | 0,0 % | 2 754 / 6 063 |
-| T36-85, ses fruits | T1-15, ses fruits | 0,0 % | 2 754 / 11 730 |
-| T16-35, ses fruits | T1-15, ses fruits | 2,3 % | 7 008 / 11 730 |
-| T141-180, ses fruits | T36-85, objets quelconques | 36,6 % | 1 537 / 1 665 |
-| T141-180, objets T1-15 à 50 % | T1-15 nu | 83,1 % | 3 286 / 2 592 |
-| T141-180, objets T1-15 à 50 % | T1-15, ses fruits | 0,0 % | 3 286 / 11 730 |
+| T36-85, ses fruits | T16-35 nu | 100,0 % | 5 472 / 2 898 |
+| T36-85, ses fruits | T1-15 nu | 56,7 % | 5 472 / 5 188 |
+| T36-85, ses fruits + une arme | T1-15 nu | 94,6 % | 6 689 / 5 188 |
+| T36-85, objets quelconques | T16-35 nu | 82,6 % | 3 361 / 2 898 |
+| T36-85, objets quelconques | T1-15 nu | 0,0 % | 3 361 / 5 188 |
+| T141-180, ses fruits | T36-85 nu | 100,0 % | 3 163 / 1 462 |
+| T141-180, ses fruits | T16-35 nu | 64,0 % | 3 163 / 2 898 |
+| T141-180, ses fruits | T1-15 nu | 0,0 % | 3 163 / 5 188 |
+| T36-85, ses fruits | T1-15, objets quelconques | 0,0 % | 5 472 / 12 022 |
+| T36-85, ses fruits | T1-15, ses fruits | 0,0 % | 5 472 / 22 805 |
+| T16-35, ses fruits | T1-15, ses fruits | 0,0 % | 13 984 / 22 805 |
+| T141-180, ses fruits | T36-85, objets quelconques | 26,4 % | 3 163 / 3 361 |
+| T141-180, objets T1-15 à 50 % | T1-15 nu | 90,1 % | 6 494 / 5 188 |
+| T141-180, objets T1-15 à 50 % | T1-15, ses fruits | 0,0 % | 6 494 / 22 805 |
 
-Un deck modeste dans ses propres fruits remonte d'environ deux paliers face à des decks nus, et fait jeu égal
-avec un T1-15 nu quand il vient de T36-85. Dès que le deck rare porte quoi que ce soit, même des objets qui ne
-sont pas les siens, le modeste retombe à 0 %. L'équipement multiplie la puissance par 4,5 en T1-15 contre 3,2 en
-T141-180 : il creuse l'écart au lieu de le réduire, parce que les fruits des personnages rares sont eux-mêmes
-les plus forts (médiane 414/377 en T1-15 contre 146/146 en T36-85).
+Un deck modeste dans ses propres fruits remonte d'environ deux paliers face à des decks nus. Dès que le deck
+rare porte quoi que ce soit, même des objets qui ne sont pas les siens, le modeste retombe à 0 %. L'équipement
+multiplie la puissance par 4,4 en T1-15 contre 3,3 en T141-180 : il creuse l'écart, parce que les fruits des
+personnages rares sont eux-mêmes les plus forts.
 
 **Objet canonique contre objet quelconque.** Mêmes personnages, mêmes fruits, distribués à leur propriétaire
-(200 %) ou au voisin (50 %) : le canonique gagne 99,7 à 100 %. N'importe quel objet contre rien : 97,6 à 100 %.
-Ajouter une arme à son fruit : 61,2 % en T1-15, 80,4 à 92,8 % ailleurs.
+(200 %) ou au voisin (50 %) : le canonique gagne 100 %. N'importe quel objet contre rien : 100 %. Ajouter une
+arme à son fruit : 79,6 % en T1-15, 88,7 à 96,5 % ailleurs.
 
-**La puissance totale prédit le résultat.** Sur 301 confrontations de decks :
+**La puissance totale prédit le résultat**, plus nettement encore qu'à ×1. Sur 304 confrontations de decks :
 
 | Rapport de puissance | Victoires |
 |---|---|
-| 0,50 à 0,70 | 1,5 % |
-| 0,70 à 0,85 | 12,6 % |
-| 0,85 à 0,95 | 34,0 % |
-| 0,95 à 1,05 | 49,5 % |
-| 1,05 à 1,18 | 68,0 % |
-| 1,18 à 1,43 | 87,1 % |
-| 1,43 à 2,00 | 98,7 % |
+| 0,50 à 0,70 | 0,1 % |
+| 0,70 à 0,85 | 5,1 % |
+| 0,85 à 0,95 | 26,8 % |
+| 0,95 à 1,05 | 50,0 % |
+| 1,05 à 1,18 | 78,8 % |
+| 1,18 à 1,43 | 94,5 % |
+| 1,43 à 2,00 | 100,0 % |
 
-**Déroulement d'un combat (deck contre lui-même).**
+**Déroulement d'un combat à ×3 (deck contre lui-même).**
 
-- Durée : 9 à 13 tours à quatre cartes contre quatre, pour un minimum possible de 7. Une carte tombe en un coup
-  ou deux.
-- Celui qui ouvre gagne 57,3 % à 64,1 % selon le palier, et **78,4 %** entre deux decks T1-15 dans leurs fruits.
-  C'est toujours l'auteur de `/battle start` qui ouvre.
-- Crit Gamble à chaque tour bat Attack à chaque tour 68,1 % du temps.
-- Un joueur présent bat un joueur absent (l'horloge attaque pour lui) 92,9 % du temps.
-- Se soigner sous 35 % de vie fait perdre : 38,5 % de victoires contre la même politique sans soin (46,1 %
-  équipé). Un soin rend 25 à 45 % de la vie, un coup en retire davantage.
+- Durée : 22 à 34 tours à quatre cartes contre quatre. Avec une horloge de 60 secondes, un combat où les deux
+  joueurs laissent filer chaque tour dure donc une demi-heure.
+- Celui qui ouvre gagne 52,7 % à 58,6 % selon le palier et l'équipement. C'est toujours l'auteur de
+  `/battle start` qui ouvre.
+- Crit Gamble à chaque tour bat Attack à chaque tour 78,7 % du temps : sur un combat long, le bouton Attack
+  n'a plus d'intérêt que pour achever.
+- Un joueur présent bat un joueur absent (l'horloge attaque pour lui) 88,1 % du temps.
+- Se soigner sous 35 % de vie est devenu légèrement payant : 54,9 % de victoires contre la même politique sans
+  soin.
 
 ## 6. Ce qui n'a pas été testé
 
-- **L'API Discord réelle.** Permissions, limites de débit, refus côté serveur (menu de plus de 25 options si la
-  boutique grossit, longueurs). L'expiration du jeton d'interaction est simulée, pas vécue.
+- **L'API Discord réelle.** Permissions, limites de débit, refus côté serveur. L'expiration du jeton
+  d'interaction et les limites des listes (25 choix, 100 caractères) sont vérifiées sur ce que le code produit,
+  pas sur ce que Discord accepte.
 - **Les courses entre clics** sont reproduites dans une seule boucle d'événements, avec une latence simulée.
 - **Un vrai redémarrage.** Simulé en rappelant le `setup()` du package avec un bot non connecté.
 - **Deux processus** servant le même combat : les verrous du cog sont en mémoire, seules les transactions de
-  `sessions.py` protègent entre processus, et cela n'est pas exercé.
-- **L'autocomplétion** des trésors et la **liste noire** (le faux bot laisse passer tout le monde). La
-  vérification du propriétaire faite par `BallInstanceTransform` est rejouée à l'identique par le harnais.
-- **Les emojis** (`get_emoji` rend toujours rien ici).
-- **L'admin** au-delà de `manage.py check`.
-- **Le chargeur d'équipement** n'a tourné qu'à blanc (`--dry-run`).
+  `sessions.py` protègent entre processus.
+- **La liste noire** (le faux bot laisse passer tout le monde) et **les emojis** (`get_emoji` ne rend rien ici,
+  donc les libellés des listes sont testés sans emoji).
+- **L'admin** au-delà de `manage.py check`, et **le chargeur d'équipement** autrement qu'à blanc.
 - **Les écouteurs du bus** (succès, pass) : seul l'envoi de `BATTLE_WIN` et `BATTLE_PLAYED` est vérifié.
 - **L'équilibrage avec `Buff` et objets de boutique** : les deux tables sont vides dans le dump.
 
@@ -245,14 +296,16 @@ objets Discord qui enregistrent ce que le cog envoie et refusent ce que Discord 
 message de suivi quinze minutes après. Un clic passe par `View._scheduled_task` de discord.py ; les horloges de
 tour sont les vraies tâches du cog.
 
+Un argument de commande est lu par le transformateur que le cog a donné à ce paramètre, et sa liste
+d'autocomplétion est demandée à ce même paramètre.
+
 Le hasard du moteur est remplacé par une suite de tirages écrite d'avance dans les tests de règles, et rendu au
 vrai `random` avec une graine dans la simulation. Les réglages ne sont jamais modifiés en base : un test qui en
-veut d'autres les surcharge pour son cog seulement.
+veut d'autres les surcharge pour son cog seulement, et le multiplicateur de vie est tenu à 1 par défaut.
 
 Un seul fichier de test tourne à la fois sur la base : chacun prend un verrou PostgreSQL (`pg_advisory_lock`)
 avant de commencer et attend son tour s'il est pris. Sans cela, deux sessions qui rejouent la suite en même
-temps se font échouer l'une l'autre, le classement lisant tous les combats et le test de redémarrage fermant
-tous les combats ouverts.
+temps se font échouer l'une l'autre.
 
 Chaque fichier possède mille identifiants Discord à partir de 9 000 000 000 000 000 000 et efface ses joueurs
 avant et après (cartes, sessions, combats, registre de berries suivent en cascade). Les lignes `Buff` créées par

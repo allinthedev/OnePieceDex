@@ -94,7 +94,7 @@ if selected "t00_django"; then
 fi
 
 # -- the real cog, in the container -------------------------------------------------------------------------
-for path in battle_tests/t0[1-9]_*.py; do
+for path in battle_tests/t[0-9][0-9]_*.py; do
   name="$(basename "$path" .py)"
   selected "$name" || continue
   bash battle_tests/run.sh python3 "/work/battle_tests/$name.py" >"$OUT/$name.txt" 2>&1
