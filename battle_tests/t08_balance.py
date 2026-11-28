@@ -7,6 +7,9 @@ the real cog functions give (`get_matchup_multiplier`, `get_equipment_multiplier
 against the real cog: the same decks, the same seed and the same policy must give the same winner in the same
 number of turns, battle after battle.
 
+Unlike the rules tests, this file plays with the settings exactly as the database holds them, health
+multiplier included: these are the figures players will meet. A last section turns that multiplier.
+
 Typical decks are picked by rule, not by hand: for a rarity tier, the four active characters with a canonical
 devil fruit whose attack + health is closest to the median of their tier.
 """
@@ -110,7 +113,7 @@ async def card(w, name: str, items: list[str], s):
         item.pk = next(_ids)
         slot = bm.role_of(item.ball_id, s)
         percent = await battle_cog.equip_percent(ball.ball_id, item.ball_id, s)
-        entry = battle_cog.serialize_item(item, slot, percent, w.bot)
+        entry = battle_cog.serialize_item(item, slot, percent, w.bot, s.health_multiplier)
         ball.equipment = [old for old in ball.equipment if old["slot"] != slot] + [entry]
     h.loadout.apply_equipment(ball, s.full_set_bonus_percent)
     return ball
@@ -189,6 +192,44 @@ class Catalogue:
         median = statistics.median(b.attack + b.health for b in inside)
         return min(inside, key=lambda b: (abs(b.attack + b.health - median), b.pk))
 
+    def specs(self) -> tuple[dict, dict]:
+        """Who is in each typical deck and what they are handed, per tier and per way of equipping them."""
+        specs: dict[tuple[int, str], list] = {}
+        offbrand: dict[int, str] = {}
+        for t in range(6):
+            members = self.typical(t)
+            fruits = [self.canon(b, "fruit") for b in members]
+            gear_fruit = self.median_item(
+                self.fruits, min(t, 4), exclude=self.everyones, at_least={f.pk for f in fruits}
+            )
+            gear_weapon = self.median_item(self.weapons, min(t, 2))
+            top = [self.median_item(self.fruits, 0).country, self.median_item(self.weapons, 0).country]
+            offbrand[t] = f"{gear_fruit.country} + {gear_weapon.country}"
+            specs[(t, "bare")] = [(b.country, []) for b in members]
+            # their own fruit, and their own weapon for the few who have one
+            specs[(t, "canon")] = [
+                (b.country, [x.country for x in (self.canon(b, "fruit"), self.canon(b, "weapon")) if x])
+                for b in members
+            ]
+            # the same four fruits, each in the hands of the next character: "any item" at equal cost
+            specs[(t, "swapped")] = [
+                (b.country, [fruits[(i + 1) % len(members)].country]) for i, b in enumerate(members)
+            ]
+            # a fruit of their own tier that is nobody's, plus one of the commonest weapons their tier can find
+            specs[(t, "offbrand")] = [(b.country, [gear_fruit.country, gear_weapon.country]) for b in members]
+            # their own fruit plus a weapon: the full set at its cheapest
+            specs[(t, "canon+w")] = [
+                (b.country, [self.canon(b, "fruit").country, (self.canon(b, "weapon") or gear_weapon).country])
+                for b in members
+            ]
+            # somebody else's top gear
+            specs[(t, "toprare")] = [(b.country, top) for b in members]
+        return specs, offbrand
+
+
+async def build(w: h.World, specs: dict, s, only=None) -> dict:
+    return {key: await deck(w, spec, s) for key, spec in specs.items() if only is None or key in only}
+
 
 async def against_the_cog(w: h.World, s):
     """The same decks, seed and policy through the real cog and through the simulator."""
@@ -228,35 +269,9 @@ async def against_the_cog(w: h.World, s):
         r.check(f"{label}: same winner in the same number of turns as the real cog, seed after seed", same, total)
 
 
-async def build_decks(w: h.World, s, cat: Catalogue) -> dict:
-    decks: dict[tuple[int, str], list] = {}
+def describe(decks: dict, offbrand: dict):
+    variants = ("bare", "canon", "swapped", "offbrand", "canon+w", "toprare")
     for t in range(6):
-        members = cat.typical(t)
-        own_fruits = [cat.canon(b, "fruit") for b in members]
-        gear_fruit = cat.median_item(cat.fruits, min(t, 4), exclude=cat.everyones, at_least={f.pk for f in own_fruits})
-        gear_weapon = cat.median_item(cat.weapons, min(t, 2))
-        top_fruit = cat.median_item(cat.fruits, 0)
-        top_weapon = cat.median_item(cat.weapons, 0)
-        variants = {
-            "bare": [(b.country, []) for b in members],
-            # their own fruit, and their own weapon for the few who have one
-            "canon": [
-                (b.country, [x.country for x in (cat.canon(b, "fruit"), cat.canon(b, "weapon")) if x]) for b in members
-            ],
-            # the same four fruits, each in the hands of the next character: "any item" at equal cost
-            "swapped": [(b.country, [own_fruits[(i + 1) % len(members)].country]) for i, b in enumerate(members)],
-            # a fruit of their own tier that is nobody's, plus one of the commonest weapons their tier can find
-            "offbrand": [(b.country, [gear_fruit.country, gear_weapon.country]) for b in members],
-            # their own fruit plus that same common weapon: the full set at its cheapest
-            "canon+w": [
-                (b.country, [cat.canon(b, "fruit").country, (cat.canon(b, "weapon") or gear_weapon).country])
-                for b in members
-            ],
-            # somebody else's top gear
-            "toprare": [(b.country, [top_fruit.country, top_weapon.country]) for b in members],
-        }
-        for variant, spec in variants.items():
-            decks[(t, variant)] = await deck(w, spec, s)
         lines = []
         for bare, full in zip(decks[(t, "bare")], decks[(t, "canon")]):
             gear = h.loadout.equipment_line(full.equipment) or "-"
@@ -264,8 +279,7 @@ async def build_decks(w: h.World, s, cat: Catalogue) -> dict:
         r.note(f"{TIER_NAMES[t]:9s} " + ", ".join(lines))
         powers = ", ".join(f"{variant} {power(decks[(t, variant)])}" for variant in variants)
         r.note(f"{'':9s} power (attack + health of the deck): {powers}")
-        r.note(f"{'':9s} offbrand = {gear_fruit.country} + {gear_weapon.country}")
-    return decks
+        r.note(f"{'':9s} offbrand = {offbrand[t]}")
 
 
 async def how_a_battle_plays(s, decks: dict):
@@ -376,13 +390,39 @@ async def power_curve(s, decks: dict):
             r.note(f"power ratio {low:.2f} to {high:.2f}: wins {mean} on average over {len(inside)} match-ups")
 
 
+async def turning_the_knob(w: h.World, s, specs: dict):
+    """The same match-ups with the health multiplier at 1, 2 and 3: what the setting buys."""
+    wanted = {(0, "bare"), (0, "canon"), (2, "bare"), (2, "canon")}
+    columns = (
+        "opener wins / turns: T1-15 bare, T1-15 geared, T36-85 bare | healing under 35% | T36-85 geared vs T1-15 bare"
+    )
+    r.note(columns)
+    for multiplier in (1.0, 2.0, 3.0):
+        tuned = copy.copy(s)
+        tuned.health_multiplier = multiplier
+        decks = await build(w, specs, tuned, only=wanted)
+        cells = []
+        for key in ((0, "bare"), (0, "canon"), (2, "bare")):
+            _, turns, opener = await series(decks[key], copy.deepcopy(decks[key]), tuned, alternate=False)
+            cells.append(f"{pct(opener)} / {turns:4.1f}")
+        mirror = decks[(0, "bare")]
+        heal, _, _ = await series(mirror, copy.deepcopy(mirror), tuned, p_smart_heal, p_smart)
+        upset, _, _ = await series(decks[(2, "canon")], decks[(0, "bare")], tuned)
+        r.note(f"x{multiplier:g}:  " + ",  ".join(cells) + f"  |  {pct(heal)}  |  {pct(upset)}")
+
+
 async def body(w: h.World):
+    # the settings as the database holds them, health multiplier included
+    w.defaults.clear()
     s = await w.cog.get_settings()
+    r.note(f"health multiplier in play: x{s.health_multiplier:g}")
     r.section("the simulator against the real cog")
     await against_the_cog(w, s)
     r.section("typical decks")
     cat = await h.sync_to_async(Catalogue)(s)
-    decks = await build_decks(w, s, cat)
+    specs, offbrand = cat.specs()
+    decks = await build(w, specs, s)
+    describe(decks, offbrand)
     r.section("how a battle plays, whatever the decks")
     await how_a_battle_plays(s, decks)
     r.section("rarity alone: nobody wears anything (row beats column, opener alternating)")
@@ -393,6 +433,8 @@ async def body(w: h.World):
     await canon_or_not(s, decks)
     r.section("how much extra power wins how often (random pairs of the decks above, by power ratio)")
     await power_curve(s, decks)
+    r.section("turning the health multiplier")
+    await turning_the_knob(w, s, specs)
 
 
 async def main(w: h.World):

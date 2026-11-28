@@ -1,8 +1,8 @@
 # Battle mode — player guide
 
 Written to be posted on the server, one block at a time: every block between two lines fits in a single
-Discord message. The figures in it (turn timer, heal uses, the +10% of a full set) are the default
-settings: if they are changed in the panel, change them here too.
+Discord message. The figures in it (turn timer, heal uses, the +10% of a full set, health counted three
+times) are the default settings: if they are changed in the panel, change them here too.
 
 ---
 
@@ -73,6 +73,9 @@ rightful owners is where battles are won.
 
 Once both players press **✔ Ready**, the battle starts. The challenger plays first, then you take turns.
 Your first character still standing faces theirs.
+
+In a battle everybody has **three times** the health written on their card, what they hold included:
+a fight is an exchange of blows, not a single one.
 
 On your turn — you have 60 seconds, after which you simply attack:
 

@@ -51,7 +51,8 @@ class Buff(models.Model):
     capacity_value = models.FloatField(
         default=0,
         help_text="The number the effect needs: a percentage healed, an amount of damage, or a multiplier. "
-        "Ignored by the plain special attack.",
+        "Ignored by the plain special attack. An amount of damage is dealt as written: size it against health "
+        "as the health multiplier of the battle settings leaves it, not as the cards show it.",
     )
 
     @classmethod
@@ -158,6 +159,14 @@ class BattleSettings(models.Model):
             "Damage multiplier used by the Capacity action when the treasure's Buff sets no capacity "
             "effect, which is the case for every treasure until one is given one."
         ),
+    )
+    health_multiplier = models.FloatField(
+        default=3.0,
+        help_text="What every fighter's health is multiplied by in a battle, what it holds included. Attack "
+        "and health are about the same number on every treasure, so at 1 a hit takes most of an equal "
+        "opponent's health and a character lasts one or two hits. At 2 it lasts two to four, at 3 three to "
+        "five, and battles get longer by as much. Between 0.5 and 10. Only characters added to a deck after a "
+        "change are affected.",
     )
     turn_timeout_seconds = models.PositiveIntegerField(
         default=60, help_text="If the active player doesn't act in time, the turn auto-resolves as an Attack."
@@ -289,6 +298,8 @@ class BattleSettings(models.Model):
             raise ValidationError({"tier_bounds": "A list of rarities is needed, such as [15, 35, 85, 140, 180]."})
         if bounds != sorted(set(bounds)):
             raise ValidationError({"tier_bounds": "The bounds go up, with no rarity twice: rarest tier first."})
+        if not 0.5 <= self.health_multiplier <= 10:
+            raise ValidationError({"health_multiplier": "Between 0.5 and 10."})
         if self.turn_timeout_seconds < MIN_TURN_SECONDS:
             # there is no battle without a clock: 0 does not switch it off, it plays every turn at once
             raise ValidationError(
@@ -333,6 +344,10 @@ class BattleSettings(models.Model):
                 condition=Q(tier_enemy_2plus_lower_bonus_crit_chance__gte=0)
                 & Q(tier_enemy_2plus_lower_bonus_crit_chance__lte=1),
                 name="battlesettings_tier_bonus_crit_bounds",
+            ),
+            models.CheckConstraint(
+                condition=Q(health_multiplier__gte=0.5) & Q(health_multiplier__lte=10),
+                name="battlesettings_health_multiplier_bounds",
             ),
         ]
 

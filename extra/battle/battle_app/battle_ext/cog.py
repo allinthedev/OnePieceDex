@@ -15,7 +15,6 @@ from django.utils import timezone
 from ballsdex.core.discord import LayoutView, View
 from ballsdex.core.game_events import Event, EventContext, bus
 from ballsdex.core.utils.menus import ChunkedListSource, ItemFormatter, Menu
-from ballsdex.core.utils.transformers import BallInstanceTransform
 from bd_models.models import BallInstance, Player
 from settings.models import settings
 
@@ -36,6 +35,7 @@ from ..models import (
     role_of,
 )
 from . import sessions
+from .arguments import CharacterTransform, DeckCharacterTransform, DeckItemTransform, ItemTransform
 from .engine import BattleAction, BattleBall, hp_bar, resolve_action
 from .loadout import (
     ROLE_CHARACTER,
@@ -92,7 +92,9 @@ async def serialize_ball(
     ball = countryball.countryball
     emoji = bot.get_emoji(ball.emoji_id)
     bonus = special_bonus(countryball, battle_settings)
-    health = countryball.health + (buff.health if buff else 0) + bonus
+    # multiplied here, once, with everything the card brings: attack and health are about the same number
+    # on every treasure, and without this a hit takes most of an equal opponent's health
+    health = round((countryball.health + (buff.health if buff else 0) + bonus) * battle_settings.health_multiplier)
     attack = countryball.attack + (buff.attack if buff else 0) + bonus
     return BattleBall(
         instance_id=countryball.pk,
@@ -115,7 +117,9 @@ async def serialize_ball(
     )
 
 
-def serialize_item(countryball: BallInstance, slot: str, percent: int, bot: "BallsDexBot") -> dict:
+def serialize_item(
+    countryball: BallInstance, slot: str, percent: int, bot: "BallsDexBot", health_multiplier: float = 1.0
+) -> dict:
     """
     A weapon or a devil fruit as it sits on a fighter: its own stats, already worked out for this very card,
     and the share of them its bearer gets. Plain values only, so it goes into the battle state as it is.
@@ -129,7 +133,8 @@ def serialize_item(countryball: BallInstance, slot: str, percent: int, bot: "Bal
         "name": ball.country,
         "emoji": str(emoji) if emoji else "",
         "attack": countryball.attack,
-        "health": countryball.health,
+        # an item's health is multiplied like its bearer's own, or equipment would weigh on attack alone
+        "health": round(countryball.health * health_multiplier),
         "percent": percent,
         # kept with the item so a resistance about "any blunt weapon" needs no lookup in the middle of a turn
         "group_ids": group_ids_of(ball.pk),
@@ -714,7 +719,7 @@ class Battle(commands.GroupCog):
             yield session, side
 
     @app_commands.command()
-    async def add(self, interaction: discord.Interaction["BallsDexBot"], countryball: BallInstanceTransform):
+    async def add(self, interaction: discord.Interaction["BallsDexBot"], countryball: CharacterTransform):
         """
         Add a character to your battle deck.
         """
@@ -763,7 +768,7 @@ class Battle(commands.GroupCog):
             await self._refresh_proposal_message(interaction, session)
 
     @app_commands.command()
-    async def remove(self, interaction: discord.Interaction["BallsDexBot"], countryball: BallInstanceTransform):
+    async def remove(self, interaction: discord.Interaction["BallsDexBot"], countryball: DeckCharacterTransform):
         """
         Remove a character from your battle deck.
         """
@@ -792,8 +797,8 @@ class Battle(commands.GroupCog):
     async def equip(
         self,
         interaction: discord.Interaction["BallsDexBot"],
-        item: BallInstanceTransform,
-        character: BallInstanceTransform,
+        item: ItemTransform,
+        character: DeckCharacterTransform,
     ):
         """
         Give a weapon or a devil fruit to a character of your battle deck.
@@ -838,7 +843,7 @@ class Battle(commands.GroupCog):
                     return
 
             percent = await equip_percent(bearer["ball_id"], item.ball_id, battle_settings)
-            entry = serialize_item(item, slot, percent, self.bot)
+            entry = serialize_item(item, slot, percent, self.bot, battle_settings.health_multiplier)
             fighter = BattleBall.from_dict(bearer)
             replaced = next((old for old in fighter.equipment if old.get("slot") == slot), None)
             # one weapon and one fruit each: a second one of a kind takes the place of the first
@@ -862,7 +867,7 @@ class Battle(commands.GroupCog):
             await self._refresh_proposal_message(interaction, session)
 
     @app_commands.command()
-    async def unequip(self, interaction: discord.Interaction["BallsDexBot"], item: BallInstanceTransform):
+    async def unequip(self, interaction: discord.Interaction["BallsDexBot"], item: DeckItemTransform):
         """
         Take a weapon or a devil fruit back from the character holding it.
 
